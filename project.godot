@@ -15,6 +15,7 @@ InputSetup="*res://scripts/core/input_setup.gd"
 AudioManager="*res://scripts/audio/audio_manager.gd"
 DM="*res://scripts/destruction/destruction_manager.gd"
 FX="*res://scripts/fx/fx.gd"
+Decor="*res://scripts/world/decor.gd"
 
 [display]
 

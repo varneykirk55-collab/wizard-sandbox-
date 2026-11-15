@@ -4,6 +4,8 @@ extends Node3D
 ## collapse, and restores itself 180 s after it was first damaged.
 
 var specs: Array = []
+var decor: Array = []     # decorations riding on pieces (see Decor autoload)
+var marks: Array = []     # builder notes, e.g. window openings
 var pieces: Array = []
 var total := 0
 var loose_count := 0
@@ -19,6 +21,27 @@ func add_box(dim: Vector3, pos: Vector3, bas: Basis = Basis.IDENTITY, mat: Strin
 
 func add_cyl(diameter: float, height: float, pos: Vector3, mat: String = "stone", hp: float = 100.0, cone: bool = false) -> void:
 	specs.append({"dim": Vector3(diameter, height, diameter), "kind": 2 if cone else 1, "mat": mat, "hp": hp, "density": 1.0, "xform": Transform3D(Basis.IDENTITY, pos)})
+
+
+## Attaches a decoration to whichever piece is closest to `pos` (structure
+## space). Call after the pieces it should ride on have been added.
+func decorate(kind: String, pos: Vector3, bas: Basis = Basis.IDENTITY, tint: Color = Color(1, 1, 1), lit: bool = false) -> void:
+	var best := -1
+	var best_d := 1.0e9
+	for i in specs.size():
+		var xf: Transform3D = specs[i]["xform"]
+		var d: Vector3 = specs[i]["dim"]
+		var lp := xf.affine_inverse() * pos
+		var h := d * 0.5
+		var cl := Vector3(clampf(lp.x, -h.x, h.x), clampf(lp.y, -h.y, h.y), clampf(lp.z, -h.z, h.z))
+		var dist := lp.distance_to(cl)
+		if dist < best_d:
+			best_d = dist
+			best = i
+	if best < 0:
+		return
+	var pxf: Transform3D = specs[best]["xform"]
+	decor.append({"piece": best, "kind": kind, "xform": pxf.affine_inverse() * Transform3D(bas, pos), "tint": tint, "lit": lit})
 
 
 ## (Re)creates every piece from the blueprint.
@@ -48,6 +71,8 @@ func build() -> void:
 		else:
 			bounds = bounds.merge(box)
 	_link_supports(aabbs)
+	for dc in decor:
+		Decor.attach(pieces[dc["piece"]], dc["kind"], dc["xform"], dc["tint"], dc["lit"])
 	center = global_transform * bounds.get_center()
 	radius = bounds.size.length() * 0.5
 
@@ -93,6 +118,7 @@ func on_piece_loosened(piece) -> void:
 		damaged_at = DM.now
 	loose_count += 1
 	last_touch = DM.now
+	Decor.on_loosened(piece)
 	for d in piece.dependents:
 		if is_instance_valid(d) and not d.is_loose:
 			d.check_support()

@@ -1,6 +1,11 @@
 extends Node3D
 ## Procedurally assembles the destructible village out of pre-fractured sections.
 
+const GOLD := Color(1.0, 0.72, 0.3)
+const CYAN := Color(0.3, 0.95, 1.0)
+const VIOLET := Color(0.7, 0.4, 1.0)
+const TEAL := Color(0.25, 1.0, 0.75)
+
 var _structure_script: Script
 
 
@@ -74,6 +79,7 @@ func _wall_grid(s, start: Vector3, dir: Vector3, length: float, rows: int, rh: f
 			if door and c == door_col and r < door_rows:
 				continue
 			if windows and rows >= 4 and r == 2 and c % 2 == 1 and c != door_col:
+				s.marks.append({"pos": start + dir * ((c + 0.5) * cw) + Vector3(0.0, (r + 0.5) * rh, 0.0), "along_x": along_x, "w": cw, "h": rh})
 				continue
 			var ctr := start + dir * ((c + 0.5) * cw) + Vector3(0.0, (r + 0.5) * rh, 0.0)
 			var dimv := Vector3(cw * 0.995, rh * 0.995, thick) if along_x else Vector3(thick, rh * 0.995, cw * 0.995)
@@ -139,7 +145,43 @@ func _house(pos: Vector3, yaw: float, w: float, h: float, d: float, wall_mat: St
 	var n := int(ceilf(ch / 0.9))
 	for k in n:
 		s.add_box(Vector3(0.7, ch / n * 0.995, 0.7), Vector3(hx + 0.37, (k + 0.5) * ch / n, -hz * 0.3), Basis.IDENTITY, "stone_dark", 150.0)
+	_decorate_house(s, w, h, d, rise, drop, over, rows, rh)
 	s.build()
+
+
+## Enchanted dressing for a house: glowing windows, door lantern and rune,
+## gold ridge finials, upturned eave curls, crystals, and sometimes a sign.
+func _decorate_house(s, w: float, h: float, d: float, rise: float, drop: float, over: float, rows: int, rh: float) -> void:
+	var hx := w * 0.5
+	var hz := d * 0.5
+	var tints := [CYAN, VIOLET, TEAL]
+	var idx: int = DM.structures.size()
+	var tint: Color = tints[idx % 3]
+	var tint2: Color = tints[(idx + 1) % 3]
+	for m in s.marks:
+		var mp: Vector3 = m["pos"]
+		var ax: bool = m["along_x"]
+		var mw: float = m["w"]
+		var mh: float = m["h"]
+		var wb := Basis.IDENTITY if ax else Basis(Vector3.UP, PI * 0.5)
+		s.decorate("window", mp, wb * Basis.from_scale(Vector3(mw, mh, 1.0)), GOLD)
+	var length := w - 0.8
+	var cols := maxi(1, int(roundf(length / 1.25)))
+	var cw := length / cols
+	var door_x := -hx + 0.4 + (int(cols / 2.0) + 0.5) * cw
+	var door_top := mini(3, rows - 1) * rh
+	s.decorate("lantern", Vector3(door_x + cw, minf(h - 0.35, 2.7), hz + 0.01), Basis.IDENTITY, GOLD, true)
+	if rows > 3:
+		s.decorate("rune", Vector3(door_x, door_top + rh * 0.5, hz + 0.03), Basis.IDENTITY, tint)
+	if idx % 3 == 0:
+		s.decorate("sign", Vector3(door_x - cw, minf(h - 0.3, 2.9), hz + 0.01), Basis.IDENTITY, tint)
+	for sx in [-1.0, 1.0]:
+		s.decorate("finial", Vector3(float(sx) * (hx - 0.15), h + rise + 0.12, 0.0), Basis.IDENTITY, GOLD)
+		for sz in [-1.0, 1.0]:
+			var yaw := 0.0 if float(sz) > 0.0 else PI
+			s.decorate("curl", Vector3(float(sx) * hx, h - drop + 0.12, float(sz) * (hz + over)), Basis(Vector3.UP, yaw) * Basis(Vector3.RIGHT, -0.7), GOLD)
+	s.decorate("crystal", Vector3(-(hx + 0.55), 0.0, hz * 0.5), Basis(Vector3.UP, 0.7), tint, true)
+	s.decorate("crystal", Vector3(hx * 0.4, 0.0, -(hz + 0.6)), Basis.from_scale(Vector3.ONE * 0.7), tint2)
 
 
 func _tower(pos: Vector3) -> void:
@@ -178,6 +220,21 @@ func _tower(pos: Vector3) -> void:
 			var k := (j + 0.5) * 0.5
 			var width := 2.0 * rim * (1.0 - j * 0.5) * tan(PI / 8.0) * 1.08
 			s.add_box(Vector3(width, 0.16, slope * 0.5), p0 + u * (slope * k), bas, "roof_slate", 80.0)
+	# Enchantments: rune band, glowing slits, crown crystals, apex crystal, lanterns.
+	for i in 4:
+		var ra := float(i) * TAU / 4.0 + 0.4
+		var rb := Basis(Vector3.UP, PI * 0.5 - ra)
+		s.decorate("rune", Vector3(cos(ra) * 3.7, 7.2, sin(ra) * 3.7), rb * Basis.from_scale(Vector3.ONE * 1.8), CYAN)
+		var wa := ra + PI * 0.25
+		var wb := Basis(Vector3.UP, PI * 0.5 - wa)
+		s.decorate("window", Vector3(cos(wa) * 3.66, 5.2, sin(wa) * 3.66), wb * Basis.from_scale(Vector3(0.45, 1.1, 1.0)), GOLD)
+	for i in range(1, 12, 4):
+		var ca := float(i) * TAU / 12.0
+		s.decorate("crystal", Vector3(cos(ca) * 3.75, y + 0.02, sin(ca) * 3.75), Basis.from_scale(Vector3.ONE * 0.7), TEAL)
+	s.decorate("crystal", Vector3(0.0, y + apex_h - 0.4, 0.0), Basis.from_scale(Vector3.ONE * 2.2), VIOLET, true)
+	for la in [PI * 0.5 - 0.55, PI * 0.5 + 0.55]:
+		var lf := float(la)
+		s.decorate("lantern", Vector3(cos(lf) * 4.36, 2.7, sin(lf) * 4.36), Basis(Vector3.UP, PI * 0.5 - lf), GOLD, true)
 	s.build()
 
 
@@ -202,6 +259,10 @@ func _gate(pos: Vector3) -> void:
 	s.add_box(Vector3(3.9, 0.8, 1.1), Vector3(-1.95, 4.9, 0.0), Basis.IDENTITY, "stone", 160.0)
 	s.add_box(Vector3(3.9, 0.8, 1.1), Vector3(1.95, 4.9, 0.0), Basis.IDENTITY, "stone", 160.0)
 	s.add_box(Vector3(1.6, 0.7, 1.3), Vector3(0.0, 5.65, 0.0), Basis.IDENTITY, "stone_dark", 160.0)
+	for sx in [-1.0, 1.0]:
+		s.decorate("rune", Vector3(float(sx) * 3.2, 2.6, 0.67), Basis.from_scale(Vector3.ONE * 1.5), VIOLET)
+		s.decorate("lantern", Vector3(float(sx) * 1.6, 4.45, 0.56), Basis.IDENTITY, GOLD, true)
+	s.decorate("crystal", Vector3(0.0, 6.0, 0.0), Basis.from_scale(Vector3.ONE * 1.4), TEAL, true)
 	s.build()
 
 

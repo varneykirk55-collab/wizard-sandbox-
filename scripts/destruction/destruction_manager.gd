@@ -313,21 +313,21 @@ func _by_dist(a, b) -> bool:
 # ---------------------------------------------------------------------------
 
 func _build_materials() -> void:
-	materials["stone"] = _mat(Color(0.62, 0.6, 0.57), 0.92, 0.8, true, 0.05)
-	materials["stone_dark"] = _mat(Color(0.4, 0.4, 0.43), 0.95, 0.8, true, 0.05)
-	materials["stone_light"] = _mat(Color(0.78, 0.74, 0.66), 0.9, 0.8, true, 0.06)
+	materials["stone"] = _mat(Color(0.52, 0.5, 0.62), 0.92, 0.8, true, 0.05)
+	materials["stone_dark"] = _mat(Color(0.3, 0.29, 0.42), 0.95, 0.8, true, 0.05)
+	materials["stone_light"] = _mat(Color(0.7, 0.68, 0.8), 0.9, 0.8, true, 0.06)
 	materials["rock"] = _mat(Color(0.2, 0.17, 0.15), 1.0, 0.6, true, 0.04)
-	materials["plaster"] = _mat(Color(0.9, 0.86, 0.76), 0.85, 0.5, false, 0.02)
-	materials["plaster_warm"] = _mat(Color(0.88, 0.74, 0.56), 0.85, 0.5, false, 0.02)
-	materials["timber"] = _mat(Color(0.3, 0.2, 0.13), 0.8, 1.2, false, 0.03)
-	materials["wood"] = _mat(Color(0.58, 0.42, 0.25), 0.75, 1.2, false, 0.03)
-	materials["barrel"] = _mat(Color(0.45, 0.28, 0.16), 0.7, 1.4, false, 0.04)
-	materials["roof_red"] = _mat(Color(0.66, 0.24, 0.16), 0.8, 1.6, true, 0.08)
-	materials["roof_slate"] = _mat(Color(0.28, 0.33, 0.42), 0.6, 1.6, true, 0.08)
-	materials["thatch"] = _mat(Color(0.74, 0.62, 0.33), 1.0, 2.0, false, 0.06)
-	materials["cloth_red"] = _mat(Color(0.75, 0.15, 0.18), 0.9, 1.0, false, 0.02)
-	materials["cloth_blue"] = _mat(Color(0.18, 0.32, 0.7), 0.9, 1.0, false, 0.02)
-	materials["leaf"] = _mat(Color(0.16, 0.36, 0.17), 0.95, 1.0, false, 0.07)
+	materials["plaster"] = _mat(Color(0.82, 0.78, 0.88), 0.85, 0.5, false, 0.02)
+	materials["plaster_warm"] = _mat(Color(0.86, 0.7, 0.64), 0.85, 0.5, false, 0.02)
+	materials["timber"] = _mat(Color(0.22, 0.14, 0.15), 0.8, 1.2, false, 0.03)
+	materials["wood"] = _mat(Color(0.5, 0.34, 0.27), 0.75, 1.2, false, 0.03)
+	materials["barrel"] = _mat(Color(0.4, 0.24, 0.21), 0.7, 1.4, false, 0.04)
+	materials["roof_red"] = _mat(Color(0.56, 0.16, 0.42), 0.8, 1.6, true, 0.08)
+	materials["roof_slate"] = _mat(Color(0.16, 0.3, 0.58), 0.6, 1.6, true, 0.08)
+	materials["thatch"] = _mat(Color(0.26, 0.5, 0.5), 1.0, 2.0, false, 0.06)
+	materials["cloth_red"] = _mat(Color(0.78, 0.15, 0.42), 0.9, 1.0, false, 0.02)
+	materials["cloth_blue"] = _mat(Color(0.2, 0.36, 0.88), 0.9, 1.0, false, 0.02)
+	materials["leaf"] = _mat(Color(0.1, 0.36, 0.34), 0.95, 1.0, false, 0.07)
 
 
 func _mat(color: Color, rough: float, uv: float, cellular: bool, freq: float) -> StandardMaterial3D:

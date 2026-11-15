@@ -69,3 +69,11 @@ The player does not collide with loose debris (so rubble can never trap you); de
 ## Verification status
 
 Written without access to a Godot executable: no headless import, parse check or graphical run has been performed. Expect to fix a few first-run script or shader errors, and treat all visual and audio tuning as unverified.
+
+## Enchanted night overhaul (Phase A)
+
+- Night sky with stars, cool moonlight from behind the village, purple mist, drifting magical motes.
+- Restyled palette for every stone, plaster, timber, roof, cloth and foliage material; cobblestone plaza and road.
+- `Decor` autoload (`scripts/world/decor.gd`): window, lantern, crystal, finial, curl, rune, sign. Decorations are visual-only children of one destructible piece (`structure.decorate()` picks the nearest), so they follow it, vanish with it and return on rebuild. Lights on a loosened piece fade out.
+- Decorated so far: all six houses, the tower and the gate. Not yet: perimeter walls, colonnades, well, stalls, fences, crates, barrels, trees.
+- Piece specs, health, support graph, collision, spells, audio and input are unchanged. Baseline is tagged `baseline-v1` in Git.
