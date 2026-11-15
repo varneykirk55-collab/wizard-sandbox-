@@ -1,0 +1,86 @@
+extends Node
+## Spell selection + casting. No mana, no charges, no cooldowns: every press
+## spawns a new independent spell node, so effects stack freely.
+
+signal spell_changed(index: int)
+signal cast(index: int)
+
+const THUNDER_REPEAT := 0.11   # auto-repeat while held (clicking faster also works)
+
+var info: Array = [
+	{"name": "CATACLYSM", "color": Color(1.0, 0.5, 0.12)},
+	{"name": "THUNDER GOD", "color": Color(0.55, 0.75, 1.0)},
+	{"name": "GRAVITY WELL", "color": Color(0.7, 0.35, 1.0)},
+	{"name": "INFERNO", "color": Color(1.0, 0.3, 0.05)},
+	{"name": "METEOR", "color": Color(1.0, 0.75, 0.35)},
+]
+var current := 0
+
+var _scripts: Array = []
+var _held_tornado = null
+var _thunder_t := 0.0
+var _holding := false
+
+
+func _ready() -> void:
+	for f in ["cataclysm", "thunder", "gravity_well", "inferno", "meteor"]:
+		_scripts.append(load("res://scripts/spells/%s.gd" % f))
+
+
+func select(i: int) -> void:
+	var idx := wrapi(i, 0, info.size())
+	if idx == current:
+		return
+	release()
+	current = idx
+	spell_changed.emit(current)
+	AudioManager.play_ui("chime", -14.0, 1.6 + 0.12 * current)
+
+
+func _spawn(i: int):
+	var n = _scripts[i].new()
+	FX.spell_root.add_child(n)
+	return n
+
+
+## hand: world position of the casting hand. aim: crosshair hit point.
+## ground: aim point projected to the ground. normal: surface normal at aim.
+func press(hand: Vector3, aim: Vector3, ground: Vector3, normal: Vector3) -> void:
+	_holding = true
+	match current:
+		0:
+			_spawn(0).launch(hand, aim)
+		1:
+			_spawn(1).strike(aim)
+			_thunder_t = THUNDER_REPEAT
+		2:
+			var p := aim + normal * 1.5
+			p.y = maxf(p.y, 3.2)
+			_spawn(2).start(p)
+		3:
+			_held_tornado = _spawn(3)
+			_held_tornado.start(ground)
+		4:
+			_spawn(4).start(ground)
+	cast.emit(current)
+
+
+func hold(delta: float, aim: Vector3, ground: Vector3) -> void:
+	if not _holding:
+		return
+	if current == 1:
+		_thunder_t -= delta
+		if _thunder_t <= 0.0:
+			_thunder_t = THUNDER_REPEAT
+			_spawn(1).strike(aim)
+			cast.emit(current)
+	elif current == 3:
+		if is_instance_valid(_held_tornado):
+			_held_tornado.sustain(ground)
+
+
+func release() -> void:
+	_holding = false
+	if is_instance_valid(_held_tornado):
+		_held_tornado.release()
+	_held_tornado = null

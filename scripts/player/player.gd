@@ -1,0 +1,265 @@
+extends CharacterBody3D
+## First-person wizard: WASD / left stick movement, mouse / right stick look,
+## sprint, jump, procedural casting hands, aim ray and camera shake.
+
+const WALK := 6.5
+const SPRINT := 12.0
+const JUMP := 6.8
+const GRAVITY := 19.0
+const EYE := 1.65
+
+var cam: Camera3D
+var caster
+var aim_point := Vector3.ZERO
+var ground_point := Vector3.ZERO
+var aim_normal := Vector3.UP
+
+var _pitch := 0.0
+var _trauma := 0.0
+var _shake_t := 0.0
+var _bob_t := 0.0
+var _recoil := 0.0
+var _sprint_toggle := false
+var _hands: Node3D
+var _hand_r: Node3D
+var _hand_l: Node3D
+var _hand_r_home := Vector3(0.3, -0.27, -0.5)
+var _hand_l_home := Vector3(-0.33, -0.33, -0.46)
+var _orb: MeshInstance3D
+var _orb_mat: ShaderMaterial
+var _orb_light: OmniLight3D
+var _marker: Decal
+
+
+func _ready() -> void:
+	collision_layer = 4
+	collision_mask = 3
+	var col := CollisionShape3D.new()
+	var cap := CapsuleShape3D.new()
+	cap.radius = 0.4
+	cap.height = 1.8
+	col.shape = cap
+	col.position = Vector3(0.0, 0.9, 0.0)
+	add_child(col)
+
+	cam = Camera3D.new()
+	cam.position = Vector3(0.0, EYE, 0.0)
+	cam.fov = 80.0
+	cam.near = 0.05
+	cam.far = 700.0
+	add_child(cam)
+	cam.current = true
+
+	_build_hands()
+
+	_marker = Decal.new()
+	_marker.texture_emission = FX.tex_ring
+	_marker.texture_albedo = FX.tex_ring
+	_marker.albedo_mix = 0.0
+	_marker.emission_energy = 2.5
+	_marker.size = Vector3(5.0, 8.0, 5.0)
+	_marker.top_level = true
+	_marker.visible = false
+	add_child(_marker)
+
+	caster = load("res://scripts/spells/spell_caster.gd").new()
+	add_child(caster)
+	caster.spell_changed.connect(_on_spell_changed)
+	caster.cast.connect(_on_cast)
+	_on_spell_changed(0)
+	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
+		rotate_y(-event.relative.x * InputSetup.mouse_sens)
+		_pitch = clampf(_pitch - event.relative.y * InputSetup.mouse_sens, -1.5, 1.5)
+	for i in 5:
+		if event.is_action_pressed("spell_%d" % (i + 1)):
+			caster.select(i)
+	if event.is_action_pressed("spell_next"):
+		caster.select(caster.current + 1)
+	if event.is_action_pressed("spell_prev"):
+		caster.select(caster.current - 1)
+	if event.is_action_pressed("sprint_toggle"):
+		_sprint_toggle = not _sprint_toggle
+
+
+func _process(delta: float) -> void:
+	# Right-stick look with a squared response curve.
+	var look := Input.get_vector("look_left", "look_right", "look_up", "look_down")
+	var mag := look.length()
+	if mag > 0.0:
+		var curved := look * mag
+		var inv := -1.0 if InputSetup.invert_y else 1.0
+		rotate_y(-curved.x * InputSetup.pad_sens * delta)
+		_pitch = clampf(_pitch - curved.y * InputSetup.pad_sens * 0.7 * inv * delta, -1.5, 1.5)
+
+	# Camera shake.
+	_trauma = maxf(0.0, _trauma - delta * 1.3)
+	var s := minf(_trauma * _trauma, 1.6)
+	_shake_t += delta * 38.0
+	cam.rotation = Vector3(_pitch + sin(_shake_t * 1.3) * 0.035 * s, sin(_shake_t * 1.7 + 1.0) * 0.03 * s, sin(_shake_t * 2.3 + 2.0) * 0.04 * s)
+	cam.position = Vector3(sin(_shake_t * 2.1) * 0.1 * s, EYE + sin(_shake_t * 2.9 + 0.5) * 0.1 * s, 0.0)
+
+	# Hands: walk bob, cast recoil, pulsing orb.
+	var speed := Vector2(velocity.x, velocity.z).length()
+	_bob_t += delta * (4.0 + speed * 1.1)
+	var bob := Vector3(cos(_bob_t * 0.5) * 0.008, sin(_bob_t) * 0.008, 0.0) * minf(speed / WALK, 1.6)
+	_recoil = maxf(0.0, _recoil - delta * 5.0)
+	var kick := sin(_recoil * PI) * 0.16
+	_hand_r.position = _hand_r_home + bob + Vector3(0.0, kick * 0.35, -kick)
+	_hand_l.position = _hand_l_home + bob * Vector3(-1.0, 1.0, 1.0) + Vector3(0.0, kick * 0.2, -kick * 0.6)
+	var holding := Input.is_action_pressed("cast")
+	var pulse := 1.0 + 0.12 * sin(_shake_t * 0.25) + _recoil * 1.2 + (0.35 if holding else 0.0)
+	_orb.scale = Vector3.ONE * 0.07 * pulse
+	_orb_light.light_energy = 1.2 + _recoil * 4.0 + (1.0 if holding else 0.0)
+
+	# Ground target ring for the area spells.
+	if _marker.visible:
+		_marker.global_position = aim_point if caster.current == 1 or caster.current == 2 else ground_point
+		_marker.rotation.y += delta * 1.5
+
+
+func _physics_process(delta: float) -> void:
+	var inp := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
+	if inp.length() < 0.2:
+		_sprint_toggle = false
+	var dir := global_transform.basis * Vector3(inp.x, 0.0, inp.y)
+	var speed := SPRINT if (Input.is_action_pressed("sprint") or _sprint_toggle) else WALK
+	var accel := 60.0 if is_on_floor() else 18.0
+	velocity.x = move_toward(velocity.x, dir.x * speed, accel * delta)
+	velocity.z = move_toward(velocity.z, dir.z * speed, accel * delta)
+	if not is_on_floor():
+		velocity.y -= GRAVITY * delta
+	elif Input.is_action_just_pressed("jump"):
+		velocity.y = JUMP
+	move_and_slide()
+	if global_position.y < -30.0:
+		global_position = Vector3(0.0, 1.0, 31.0)
+		velocity = Vector3.ZERO
+
+	_update_aim()
+	if Input.is_action_just_pressed("cast"):
+		caster.press(_orb.global_position, aim_point, ground_point, aim_normal)
+	elif Input.is_action_pressed("cast"):
+		caster.hold(delta, aim_point, ground_point)
+	if Input.is_action_just_released("cast"):
+		caster.release()
+
+
+func _update_aim() -> void:
+	var from := cam.global_position
+	var dirv := -cam.global_transform.basis.z
+	var q := PhysicsRayQueryParameters3D.create(from, from + dirv * 400.0, 11)
+	var hit := get_world_3d().direct_space_state.intersect_ray(q)
+	if hit.is_empty():
+		aim_point = from + dirv * 150.0
+		aim_normal = -dirv
+		if dirv.y < -0.02:
+			var t := minf(from.y / -dirv.y, 250.0)
+			ground_point = from + dirv * t
+		else:
+			ground_point = from + dirv * 120.0
+		ground_point.y = 0.0
+	else:
+		aim_point = hit["position"]
+		aim_normal = hit["normal"]
+		ground_point = Vector3(aim_point.x, 0.0, aim_point.z)
+
+
+func add_trauma(v: float) -> void:
+	_trauma = minf(1.6, _trauma + v)
+
+
+func hold_trauma(v: float) -> void:
+	_trauma = maxf(_trauma, minf(v, 1.0))
+
+
+func _on_spell_changed(i: int) -> void:
+	var c: Color = caster.info[i]["color"]
+	_orb_mat.set_shader_parameter("color", c)
+	_orb_light.light_color = c
+	_marker.modulate = c
+	_marker.visible = i != 0
+	var sizes := [5.0, 5.0, 8.0, 7.0, 16.0]
+	var sz: float = sizes[i]
+	_marker.size = Vector3(sz, 8.0, sz)
+
+
+func _on_cast(_i: int) -> void:
+	_recoil = 1.0
+	AudioManager.play_ui("cast", -9.0, 0.9 + 0.1 * caster.current)
+	InputSetup.rumble(0.25, 0.1, 0.08)
+
+
+# ---------------------------------------------------------------------------
+# Procedural wizard hands
+# ---------------------------------------------------------------------------
+
+func _build_hands() -> void:
+	_hands = Node3D.new()
+	cam.add_child(_hands)
+	var skin := StandardMaterial3D.new()
+	skin.albedo_color = Color(0.86, 0.66, 0.52)
+	skin.roughness = 0.7
+	var robe := StandardMaterial3D.new()
+	robe.albedo_color = Color(0.17, 0.1, 0.4)
+	robe.roughness = 0.9
+	var trim := StandardMaterial3D.new()
+	trim.albedo_color = Color(0.95, 0.75, 0.3)
+	trim.metallic = 0.8
+	trim.roughness = 0.3
+	_hand_r = _make_hand(1.0, skin, robe, trim)
+	_hand_r.position = _hand_r_home
+	_hand_l = _make_hand(-1.0, skin, robe, trim)
+	_hand_l.position = _hand_l_home
+
+	# Glowing spell orb hovering over the right palm.
+	_orb_mat = FX.shader_mat("glow_shell", {"color": Color(1.0, 0.5, 0.12), "energy": 7.0, "power": 1.5, "center": 1.0})
+	_orb = FX.mesh_node(FX.sphere, _orb_mat)
+	_orb.position = Vector3(0.0, 0.12, -0.04)
+	_orb.scale = Vector3.ONE * 0.07
+	_hand_r.add_child(_orb)
+	_orb_light = FX.light(Color(1.0, 0.5, 0.12), 1.2, 3.5)
+	_orb_light.position = Vector3(0.0, 0.14, -0.04)
+	_hand_r.add_child(_orb_light)
+
+
+func _part(parent: Node3D, mesh: Mesh, mat: Material, pos: Vector3, rot: Vector3) -> void:
+	var mi := MeshInstance3D.new()
+	mi.mesh = mesh
+	mi.material_override = mat
+	mi.position = pos
+	mi.rotation = rot
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	parent.add_child(mi)
+
+
+func _make_hand(side: float, skin: Material, robe: Material, trim: Material) -> Node3D:
+	var h := Node3D.new()
+	_hands.add_child(h)
+	h.rotation = Vector3(0.35, side * 0.25, side * -0.45)
+	var sleeve := CylinderMesh.new()
+	sleeve.top_radius = 0.05
+	sleeve.bottom_radius = 0.12
+	sleeve.height = 0.46
+	_part(h, sleeve, robe, Vector3(0.0, -0.01, 0.3), Vector3(-PI * 0.5, 0.0, 0.0))
+	var cuff := CylinderMesh.new()
+	cuff.top_radius = 0.056
+	cuff.bottom_radius = 0.058
+	cuff.height = 0.04
+	_part(h, cuff, trim, Vector3(0.0, -0.01, 0.075), Vector3(-PI * 0.5, 0.0, 0.0))
+	var palm := BoxMesh.new()
+	palm.size = Vector3(0.1, 0.03, 0.11)
+	_part(h, palm, skin, Vector3.ZERO, Vector3.ZERO)
+	var finger := CapsuleMesh.new()
+	finger.radius = 0.011
+	finger.height = 0.085
+	for i in 4:
+		_part(h, finger, skin, Vector3(-0.036 + i * 0.024, 0.018, -0.088), Vector3(-PI * 0.5 + 0.5 + i * 0.04, 0.0, 0.0))
+	var thumb := CapsuleMesh.new()
+	thumb.radius = 0.013
+	thumb.height = 0.07
+	_part(h, thumb, skin, Vector3(side * -0.062, 0.01, -0.02), Vector3(-PI * 0.5 + 0.4, side * 0.8, 0.0))
+	return h
