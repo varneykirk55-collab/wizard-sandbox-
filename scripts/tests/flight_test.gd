@@ -108,7 +108,7 @@ func _verify_bindings() -> void:
 		_fail("jump bindings changed")
 	if not _has_button("sprint", JOY_BUTTON_B) or not _has_key("sprint", KEY_SHIFT):
 		_fail("ground sprint bindings changed")
-	var names := ["CATACLYSM", "THUNDER GOD", "GRAVITY WELL", "INFERNO", "METEOR"]
+	var names := ["CATACLYSM", "THUNDER GOD", "GRAVITY WELL", "INFERNO", "METEOR", "BLACK FIRE", "OBLIVION"]
 	for i in names.size():
 		if player.caster.info[i]["name"] != names[i]:
 			_fail("spell name changed at %d" % i)
@@ -513,7 +513,7 @@ func _spells() -> void:
 		return
 	var window := 0.4
 	var index := int(_phase_t / window)
-	if index >= 5:
+	if index >= player.caster.info.size():
 		_release("cast")
 		if _casts <= _spell_base:
 			_fail("spell %d did not cast while flying" % _spell_i)

@@ -1,7 +1,7 @@
 # Wizard Destruction Sandbox
 
 First-person magic destruction sandbox for **Godot 4.x (Forward+)**, Windows PC.
-No enemies, no mana, no cooldowns: five spells and a village to flatten.
+No enemies, no mana, no cooldowns: seven spells and a village to flatten.
 
 ## Launch
 
@@ -22,7 +22,7 @@ Headless check (optional): `godot --headless --path . --import` then `godot --he
 | Sprint | Shift (hold) | B (hold) or L3 (toggle) |
 | Jump | Space (tap) | A (tap) |
 | Fly | Hold Space (ascend), release to hover, Ctrl descends, Shift faster | Hold A (ascend), release to hover, B descends, L3 faster |
-| Select spell | 1-5, mouse wheel | LB / RB, D-pad left / right |
+| Select spell | 1-7, mouse wheel | LB / RB, D-pad left / right |
 | Cast | Left click | RT (or X) |
 | Reset world | R | Y |
 | Pause | Esc | Start (B also resumes) |
@@ -95,3 +95,16 @@ Every new building, stall, wall, arch, cluster, post, shrub and tree is a `Struc
 Opt-in check (prints counts, support gaps, overlaps, and a one-shot explode on one cottage and one cluster):
 
 `VILLAGE_AUDIT=1 godot --headless --path . --quit-after 3`
+
+## Black Fire and Oblivion (branch fable/blackfire-oblivion)
+
+6. **Black Fire** - tap cast for a small black flame that ignites what it hits; hold cast to charge a growing sphere (full charge about 2.8 s) and release to launch it. The blast scatters fire; the fire does the real damage.
+7. **Oblivion** - a dark orb that becomes an expanding sphere of nothing (15 m), dissolves every section it touches, collapses to a point and detonates.
+
+Files: `scripts/spells/black_fire.gd`, `black_fire_field.gd`, `oblivion.gd`, `dark_fx.gd`, `shaders/void_shell.gdshader`.
+
+- Burning uses normal piece health (24 hp/s per burning section), so collapse comes from the existing support graph. Burning and erasing both keep a structure "touched", so the 180 s restore waits until the fire is out or the void is gone, then rebuilds as usual.
+- Fire limits: 140 burning sections at once, 4 new ignitions per 0.2 s tick, spread limited to 12 generations for a tap and up to 22 for a full charge. Burnt debris turns to ash after 2.5 to 4.5 s. Fire audio is 3 looping emitters and 4 roaming lights regardless of fire size.
+- Oblivion dissolves up to 5 sections per tick (30 ticks a second) and never pulls anything.
+- Touched outside the new files: `spell_caster.gd` (two entries, charge and release), `player.gd` (spell keys follow the spell count, ground marker hidden for the two projectile spells), `input_setup.gd` (keys 6 and 7), `hud.gd` (hint text, slot width), `fx.gd` (two registration hooks), `flight_test.gd` (covers all seven spells). Viewmodel, flight, village and the original spells are unchanged; the new spells get the viewmodel's generic cast kick.
+- Not run in Godot: no headless or graphical test was available where this was written.

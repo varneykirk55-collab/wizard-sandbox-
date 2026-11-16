@@ -14,6 +14,7 @@ var info: Array = [
 	{"name": "INFERNO", "color": Color(1.0, 0.3, 0.05)},
 	{"name": "METEOR", "color": Color(1.0, 0.75, 0.35)},
 	{"name": "BLACK FIRE", "color": Color(0.9, 0.08, 0.12)},
+	{"name": "OBLIVION", "color": Color(0.4, 0.2, 0.9)},
 ]
 var current := 0
 
@@ -28,7 +29,7 @@ var _last_hand := Vector3.ZERO
 
 
 func _ready() -> void:
-	for f in ["cataclysm", "thunder", "gravity_well", "inferno", "meteor", "black_fire"]:
+	for f in ["cataclysm", "thunder", "gravity_well", "inferno", "meteor", "black_fire", "oblivion"]:
 		_scripts.append(load("res://scripts/spells/%s.gd" % f))
 	_dark = load("res://scripts/spells/dark_fx.gd").new()
 	add_child(_dark)
@@ -76,6 +77,10 @@ func press(hand: Vector3, aim: Vector3, ground: Vector3, normal: Vector3) -> voi
 			_charge = _spawn(5)
 			_charge.dark = _dark
 			_charge.begin(hand)
+		6:
+			var orb = _spawn(6)
+			orb.dark = _dark
+			orb.launch(hand, aim)
 	cast.emit(current)
 
 
