@@ -874,10 +874,10 @@ func _update_crystal() -> void:
 	_crystal_mat.set_shader_parameter("intensity", intensity)
 	if _core_crystal:
 		_core_crystal.set_shader_parameter("intensity", 0.86 + _crystal_kick * 0.30)
-	_wood_mat.set_shader_parameter("head_glow", 0.135 + _crystal_kick * 0.30)
-	_halo_mat.set_shader_parameter("energy", 0.315 + _crystal_kick * 0.15)
-	_halo2_mat.set_shader_parameter("energy", 0.165 + _crystal_kick * 0.09)
-	_crystal_light.light_energy = 0.165 + _crystal_kick * 0.225
+	_wood_mat.set_shader_parameter("head_glow", 0.26 + _crystal_kick * 0.68)
+	_halo_mat.set_shader_parameter("energy", 0.24 + _crystal_kick * 0.68)
+	_halo2_mat.set_shader_parameter("energy", 0.075 + _crystal_kick * 0.26)
+	_crystal_light.light_energy = 0.75 * (0.55 + intensity * 0.55)
 	var s := 1.0 + _crystal_kick * 0.045
 	_crystal.scale = Vector3(s, s, s)
 
