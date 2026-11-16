@@ -32,8 +32,12 @@ const MOVE_SPRINT := 12.0
 # Positive curl closes the fist. Flip this one value if fingers close backwards.
 const CURL_SIGN := -1.0
 
-const CAST_HOME := Vector3(0.32, -0.20, -0.50)
-const STAFF_HOME := Vector3(-0.26, -0.22, -0.52)
+const CAST_HOME := Vector3(0.28, -0.16, -0.58)
+const STAFF_HOME := Vector3(-0.34, -0.20, -0.56)
+# Shoulder sockets below the eyes, so the sleeves come up from the body.
+const RIGHT_SHOULDER := Vector3(0.18, -0.58, 0.02)
+const LEFT_SHOULDER := Vector3(-0.22, -0.62, 0.04)
+const VIEW_LAYER := 2
 # Keep the crosshair readable. Normalized radius around the screen center.
 const RETICLE_CLEAR := 0.15
 
@@ -165,6 +169,9 @@ func _build_viewport() -> void:
 
 	_vp = SubViewport.new()
 	_vp.name = "ViewmodelViewport"
+	# Isolated world so this environment cannot replace the game sky.
+	# The arm rig is parented to the player camera below; its pose is copied
+	# onto this camera every frame so the overlay stays locked while flying.
 	_vp.own_world_3d = true
 	_vp.transparent_bg = true
 	_vp.handle_input_locally = false
@@ -181,10 +188,11 @@ func _build_viewport() -> void:
 	# punch an opaque rectangle over the game view.
 	env.background_mode = Environment.BG_CANVAS
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	env.ambient_light_color = Color(0.50, 0.46, 0.64)
-	env.ambient_light_energy = 0.95
-	env.tonemap_mode = Environment.TONE_MAPPER_ACES
-	env.tonemap_white = 6.0
+	env.ambient_light_color = Color(0.42, 0.38, 0.52)
+	env.ambient_light_energy = 0.7
+	# Linear tonemap. ACES was pushing the ruby emission toward white.
+	env.tonemap_mode = Environment.TONE_MAPPER_LINEAR
+	env.tonemap_exposure = 1.0
 	env.glow_enabled = false
 	env.fog_enabled = false
 	var world_env := WorldEnvironment.new()
@@ -202,11 +210,12 @@ func _build_viewport() -> void:
 	var moon := DirectionalLight3D.new()
 	moon.rotation_degrees = Vector3(-35.0, -160.0, 0.0)
 	moon.light_color = Color(0.62, 0.70, 1.0)
-	moon.light_energy = 0.9
+	moon.light_energy = 0.38
 	moon.shadow_enabled = false
+	moon.light_cull_mask = VIEW_LAYER
 	_vm_cam.add_child(moon)
-	_omni(Color(1.0, 0.86, 0.72), 0.75, 3.2, Vector3(0.15, 0.05, -0.12))
-	_omni(Color(0.55, 0.62, 1.0), 0.4, 3.2, Vector3(-0.4, 0.2, -0.9))
+	_omni(Color(1.0, 0.84, 0.7), 0.55, 2.8, Vector3(0.12, 0.02, -0.16))
+	_omni(Color(0.5, 0.58, 0.95), 0.28, 2.6, Vector3(-0.35, 0.15, -0.85))
 
 
 func _omni(color: Color, energy: float, rng: float, pos: Vector3) -> OmniLight3D:
@@ -216,6 +225,7 @@ func _omni(color: Color, energy: float, rng: float, pos: Vector3) -> OmniLight3D
 	light.omni_range = rng
 	light.omni_attenuation = 1.15
 	light.shadow_enabled = false
+	light.light_cull_mask = VIEW_LAYER
 	light.light_specular = 0.35
 	light.position = pos
 	_vm_cam.add_child(light)
@@ -227,7 +237,10 @@ func _sync_view() -> void:
 	if sz.x < 2:
 		sz = _viewport_size()
 	_aspect = float(sz.x) / float(maxi(sz.y, 1))
-	if player.cam and absf(player.cam.fov - _vm_cam.fov) > 0.01:
+	# Orientation lock. The arms are a child of this camera, so pitch, yaw
+	# and flight stay matched without depending on ground height.
+	_vm_cam.global_transform = Transform3D(player.cam.global_transform.basis, Vector3.ZERO)
+	if absf(player.cam.fov - _vm_cam.fov) > 0.01:
 		_vm_cam.fov = player.cam.fov
 
 
@@ -243,16 +256,18 @@ func _viewport_size() -> Vector2i:
 # ---------------------------------------------------------------------------
 
 func _build_materials() -> void:
-	_crystal_mat = _mat("res://shaders/viewmodel_crystal.gdshader", {"intensity": 1.0})
-	_wood_mat = _mat("res://shaders/viewmodel_wood.gdshader", {"head_glow": 0.22})
-	_halo_mat = _mat("res://shaders/viewmodel_glow.gdshader", {"color": Color(0.85, 0.02, 0.05), "energy": 0.35, "power": 2.6})
-	_halo2_mat = _mat("res://shaders/viewmodel_glow.gdshader", {"color": Color(0.7, 0.0, 0.04), "energy": 0.12, "power": 1.8})
+	_crystal_mat = _mat("res://shaders/viewmodel_crystal.gdshader", {"intensity": 0.75})
+	_wood_mat = _mat("res://shaders/viewmodel_wood.gdshader", {"head_glow": 0.16})
+	_halo_mat = _mat("res://shaders/viewmodel_ruby_glow.gdshader", {"color": Color(0.55, 0.01, 0.045), "energy": 0.52, "power": 1.7})
+	_halo2_mat = _mat("res://shaders/viewmodel_ruby_glow.gdshader", {"color": Color(0.42, 0.0, 0.04), "energy": 0.28, "power": 1.35})
 	_wisp_mat = _mat("res://shaders/viewmodel_glow.gdshader", {"color": _spell_color, "energy": 0.0, "power": 1.5})
 
 
 func _build_rig() -> void:
 	_rig = Node3D.new()
-	_rig.name = "Rig"
+	_rig.name = "Arms"
+	# Parent under the overlay camera, which is transform-locked to the
+	# player camera in _sync_view. A shared world would replace the game sky.
 	_vm_cam.add_child(_rig)
 
 	_cast_anchor = Node3D.new()
@@ -265,6 +280,7 @@ func _build_rig() -> void:
 	_cast_thumb = cast_hand["thumb"]
 	_cast_point = cast_hand["cast_point"]
 	_guard_cast = cast_hand["tips"]
+	_connect_arm(_cast_anchor, 1.0)
 
 	_staff_anchor = Node3D.new()
 	_staff_anchor.name = "StaffAnchor"
@@ -275,26 +291,25 @@ func _build_rig() -> void:
 	_staff_fingers = staff_hand["fingers"]
 	_staff_thumb = staff_hand["thumb"]
 	_guard_staff = staff_hand["tips"]
+	_connect_arm(_staff_anchor, -1.0)
 	_build_staff(staff_hand["palm"])
 
-	_motes = _make_particles(18, 1.6, 0.07, 0.04, Color(1.0, 0.32, 0.24, 0.8), Vector2(0.02, 0.045))
-	_sparks = _make_particles(10, 0.8, 0.05, 0.14, Color(1.0, 0.72, 0.45, 0.95), Vector2(0.008, 0.018))
+	_motes = _make_particles(14, 1.6, 0.08, 0.035, Color(0.55, 0.04, 0.05, 0.45), Vector2(0.012, 0.028))
+	_sparks = _make_particles(6, 0.7, 0.05, 0.08, Color(0.7, 0.06, 0.07, 0.5), Vector2(0.006, 0.012))
 
 
 func _make_hand(anchor: Node3D, side: float, grip: bool) -> Dictionary:
 	# Sleeve stays in camera space so casting rotates the hand, not a cone across the view.
-	var sleeve_dir := Vector3(-0.22, -0.90, 0.28) if side < 0.0 else Vector3(0.38, -0.86, 0.32)
-	_add_sleeve(anchor, sleeve_dir)
-
 	var pivot := Node3D.new()
 	pivot.name = "Gesture"
 	anchor.add_child(pivot)
 	var orient := Node3D.new()
 	orient.name = "Orient"
-	orient.transform = Transform3D(_hand_basis(side), Vector3.ZERO)
-	orient.scale = Vector3.ONE * 1.18
+	orient.transform = Transform3D(_hand_basis(side, anchor.position), Vector3.ZERO)
+	orient.scale = Vector3.ONE * 1.12
+	if grip:
+		orient.rotate_object_local(Vector3(1.0, 0.0, 0.0), deg_to_rad(-32.0))
 	pivot.add_child(orient)
-	_mesh(MeshLib.wrist(), _skin(), orient)
 
 	var palm := Node3D.new()
 	palm.name = "Palm"
@@ -313,7 +328,7 @@ func _make_hand(anchor: Node3D, side: float, grip: bool) -> Dictionary:
 		Vector4(0.0106, 0.0092, 0.0080, 0.0068),
 		Vector4(0.0088, 0.0076, 0.0066, 0.0056),
 	]
-	var xs := [0.028, 0.009, -0.011, -0.030]
+	var xs := [0.034, 0.012, -0.012, -0.036]
 	var fingers: Array = []
 	var tips: Array = []
 	for i in 4:
@@ -342,16 +357,23 @@ func _make_hand(anchor: Node3D, side: float, grip: bool) -> Dictionary:
 	return {"fingers": fingers, "thumb": thumb, "tips": tips, "cast_point": cast_point, "pivot": pivot, "palm": palm}
 
 
-func _add_sleeve(anchor: Node3D, direction: Vector3) -> void:
+func _connect_arm(anchor: Node3D, side: float) -> void:
+	# Sleeve runs from behind the shoulder (off the bottom of the view, where
+	# the body is) to the wrist, so the hand is not a floating piece.
+	var shoulder: Vector3 = LEFT_SHOULDER if side < 0.0 else RIGHT_SHOULDER
+	var wrist: Vector3 = anchor.position
+	var delta := wrist - shoulder
+	var back := 0.48
 	var sleeve := Node3D.new()
 	sleeve.name = "Sleeve"
-	sleeve.transform = Transform3D(_aim_basis(direction), Vector3.ZERO)
-	anchor.add_child(sleeve)
-	_mesh(MeshLib.sleeve(), _cloth(), sleeve)
-	var cuff := _mesh(MeshLib.band(0.042, 0.040, 0.06), _gold(), sleeve)
-	cuff.position = Vector3(0.0, 0.0, 0.012)
-	var stripe := _mesh(MeshLib.band(0.014, 0.043, 0.0), _cloth(), sleeve)
-	stripe.position = Vector3(0.0, 0.0, 0.028)
+	sleeve.transform = Transform3D(_aim_basis(delta), shoulder - delta.normalized() * back)
+	_rig.add_child(sleeve)
+	_mesh(MeshLib.sleeve_span(delta.length() + back), _cloth(), sleeve)
+	var reach := delta.length() + back
+	var trim := _mesh(MeshLib.band(0.012, 0.040, 0.0), _trim(), sleeve)
+	trim.position = Vector3(0.0, 0.0, reach - 0.03)
+	var braid := _mesh(MeshLib.band(0.006, 0.043, 0.0), _gold(), sleeve)
+	braid.position = Vector3(0.0, 0.0, reach - 0.012)
 
 
 func _aim_basis(direction: Vector3) -> Basis:
@@ -364,27 +386,28 @@ func _aim_basis(direction: Vector3) -> Basis:
 	return Basis(x, y, z)
 
 
-func _hand_basis(side: float) -> Basis:
-	# +X thumb / staff-toward-head, +Y back of the hand (toward the camera), -Z fingers.
-	# The sleeve is NOT aligned to this basis.
+func _hand_basis(side: float, wrist: Vector3) -> Basis:
+	# +Z runs from the wrist back into the sleeve, so the forearm and the hand meet.
+	var shoulder: Vector3 = LEFT_SHOULDER if side < 0.0 else RIGHT_SHOULDER
+	var into_sleeve := shoulder - wrist
+	if into_sleeve.length() < 0.001:
+		into_sleeve = Vector3(0.0, -1.0, 0.2)
+	into_sleeve = into_sleeve.normalized()
 	if side < 0.0:
-		var x := Vector3(-0.62, 0.50, -0.22).normalized()
-		var back := Vector3(-0.05, 0.25, 0.85)
-		var z := x.cross(back).normalized()
+		# Up and a little left, held away from the camera so the gem stays a gem.
+		var x := Vector3(-0.45, 0.45, -0.45).normalized()
+		var z := into_sleeve - x * into_sleeve.dot(x)
+		if z.length() < 0.001:
+			z = Vector3.DOWN
+		z = z.normalized()
 		var y := z.cross(x).normalized()
-		if y.dot(Vector3(0.0, 0.2, 1.0)) < 0.0:
-			y = -y
-			z = -z
 		return Basis(x, y, z)
-	var finger := Vector3(-0.08, -0.18, -0.98).normalized()
-	var z2 := -finger
-	var back2 := Vector3(0.1, 0.35, 0.85)
-	var y2 := back2 - z2 * back2.dot(z2)
-	y2 = y2.normalized()
-	var x2 := y2.cross(z2).normalized()
-	if x2.x < 0.0:
-		x2 = -x2
-		y2 = -y2
+	var z2 := into_sleeve
+	var x2 := Vector3(-0.15, 0.2, -1.0).cross(z2)
+	if x2.length() < 0.001:
+		x2 = Vector3.RIGHT
+	x2 = x2.normalized()
+	var y2 := z2.cross(x2).normalized()
 	return Basis(x2, y2, z2)
 
 
@@ -398,10 +421,6 @@ func _add_finger(parent: Node3D, origin: Vector3, lengths: Vector3, radii: Vecto
 		joint.name = "F%d" % i
 		joint.position = origin if i == 0 else Vector3(0.0, 0.0, -lens[i - 1])
 		prev.add_child(joint)
-		if i == 0:
-			var knuckle := _styled(MeshInstance3D.new(), _sphere(rs[0] * 0.62, 8))
-			knuckle.material_override = _skin()
-			joint.add_child(knuckle)
 		var seg := _styled(MeshInstance3D.new(), MeshLib.finger_segment(lens[i], rs[i], rs[i + 1], i == 2))
 		seg.material_override = _skin()
 		joint.add_child(seg)
@@ -425,10 +444,7 @@ func _add_thumb(parent: Node3D, side: float) -> Array:
 	root.name = "Thumb"
 	root.position = Vector3(side * 0.040, -0.006, -0.02)
 	parent.add_child(root)
-	var knuckle := _styled(MeshInstance3D.new(), _sphere(0.013, 8))
-	knuckle.material_override = _skin()
-	root.add_child(knuckle)
-	var a := _styled(MeshInstance3D.new(), MeshLib.finger_segment(0.032, 0.012, 0.010, false))
+	var a := _styled(MeshInstance3D.new(), MeshLib.finger_segment(0.034, 0.013, 0.011, false))
 	a.material_override = _skin()
 	root.add_child(a)
 	var mid := Node3D.new()
@@ -448,7 +464,7 @@ func _build_staff(pivot: Node3D) -> void:
 	_staff_model = Node3D.new()
 	_staff_model.name = "Staff"
 	# Slide the haft into the curled fingers. Tuned with the grip pose.
-	_staff_model.position = Vector3(0.0, -0.006, -0.038)
+	_staff_model.position = Vector3(0.0, -0.012, -0.05)
 	pivot.add_child(_staff_model)
 	_mesh(MeshLib.shaft(), _wood_mat, _staff_model)
 	_mesh(MeshLib.prongs(), _wood_mat, _staff_model)
@@ -457,24 +473,24 @@ func _build_staff(pivot: Node3D) -> void:
 
 	_crystal = Node3D.new()
 	_crystal.name = "Crystal"
-	_crystal.position = Vector3(0.58, 0.02, 0.0)
-	_crystal.rotation_degrees = Vector3(18.0, 0.0, 22.0)
+	_crystal.position = Vector3(0.64, 0.035, 0.0)
+	_crystal.rotation_degrees = Vector3(24.0, 12.0, 18.0)
 	_staff_model.add_child(_crystal)
-	var gem := _styled(MeshInstance3D.new(), MeshLib.crystal(0.16, 0.052))
+	var gem := _styled(MeshInstance3D.new(), MeshLib.crystal(0.20, 0.074))
 	gem.material_override = _crystal_mat
 	_crystal.add_child(gem)
-	var halo := _styled(MeshInstance3D.new(), _sphere(1.0, 12))
-	halo.material_override = _halo_mat
-	halo.scale = Vector3(0.07, 0.048, 0.048)
-	_crystal.add_child(halo)
-	var halo2 := _styled(MeshInstance3D.new(), _sphere(1.0, 10))
-	halo2.material_override = _halo2_mat
-	halo2.scale = Vector3(0.11, 0.075, 0.075)
-	_crystal.add_child(halo2)
+	var core := _styled(MeshInstance3D.new(), MeshLib.crystal(0.20, 0.074))
+	core.material_override = _core_mat()
+	core.position = Vector3(0.0, 0.012, 0.0)
+	core.scale = Vector3(0.55, 0.55, 0.55)
+	_crystal.add_child(core)
+	# A tight shell, only slightly larger than the gem. A unit sphere here
+	# previously read as a red sun and hid the facets.
 	_crystal_light = OmniLight3D.new()
-	_crystal_light.light_color = Color(1.0, 0.22, 0.16)
-	_crystal_light.light_energy = 0.8
-	_crystal_light.omni_range = 0.7
+	_crystal_light.light_color = Color(0.85, 0.05, 0.08)
+	_crystal_light.light_energy = 0.26
+	_crystal_light.light_cull_mask = VIEW_LAYER
+	_crystal_light.omni_range = 0.55
 	_crystal_light.shadow_enabled = false
 	_crystal.add_child(_crystal_light)
 
@@ -508,6 +524,7 @@ func _finish(mi: MeshInstance3D) -> void:
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	mi.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
 	mi.extra_cull_margin = 1.0
+	mi.layers = VIEW_LAYER
 
 
 func _sphere(radius: float, seg: int) -> SphereMesh:
@@ -548,6 +565,28 @@ func _cloth() -> Material:
 	if _cloth_mat == null:
 		_cloth_mat = _mat("res://shaders/viewmodel_cloth.gdshader", {})
 	return _cloth_mat
+
+
+var _trim_mat: StandardMaterial3D
+var _core_crystal: ShaderMaterial
+
+
+func _trim() -> Material:
+	if _trim_mat == null:
+		_trim_mat = StandardMaterial3D.new()
+		_trim_mat.albedo_color = Color(0.035, 0.016, 0.06)
+		_trim_mat.roughness = 0.78
+	return _trim_mat
+
+
+func _core_mat() -> ShaderMaterial:
+	if _core_crystal == null:
+		_core_crystal = _mat("res://shaders/viewmodel_crystal.gdshader", {
+			"ruby": Color(0.72, 0.02, 0.06),
+			"core_color": Color(1.0, 0.08, 0.12),
+			"intensity": 1.01,
+		})
+	return _core_crystal
 
 
 func _gold() -> Material:
@@ -600,14 +639,15 @@ func _make_particles(amount: int, life: float, radius: float, speed: float, colo
 	var mat := StandardMaterial3D.new()
 	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	mat.blend_mode = BaseMaterial3D.BLEND_MODE_MIX
 	mat.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
 	mat.vertex_color_use_as_albedo = true
-	mat.albedo_color = Color(1.6, 1.2, 1.1)
+	mat.albedo_color = Color(0.45, 0.04, 0.05, 0.55)
 	mat.albedo_texture = _blob()
 	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 	quad.material = mat
 	particles.draw_pass_1 = quad
+	particles.layers = VIEW_LAYER
 	_vm_cam.add_child(particles)
 	return particles
 
@@ -716,12 +756,12 @@ func _apply_grip() -> void:
 	if _staff_fingers.is_empty():
 		return
 	var grips := [
-		Vector3(76, 98, 68),
-		Vector3(80, 104, 72),
-		Vector3(84, 106, 74),
-		Vector3(88, 100, 70),
+		Vector3(88, 108, 78),
+		Vector3(92, 114, 82),
+		Vector3(96, 116, 84),
+		Vector3(100, 110, 80),
 	]
-	var spread_dir := [0.6, 0.2, -0.2, -0.55]
+	var spread_dir := [8.0, 3.0, -3.0, -8.0]
 	for i in 4:
 		var curls: Vector3 = grips[i]
 		curls.x += _staff_squeeze * 8.0
@@ -762,8 +802,6 @@ func _locomotion(delta: float) -> void:
 	var sway_y := absf(sin(_bob_phase)) * -1.0 * lerpf(0.010, 0.020, sprint) * amp
 	var bob_pitch := cos(_bob_phase) * lerpf(0.6, 1.3, sprint) * amp
 	var bob_roll := sin(_bob_phase * 0.5) * lerpf(0.8, 1.8, sprint) * amp
-	var look: float = player.cam.rotation.x
-	var look_drop := clampf(-look * 0.03, -0.05, 0.05)
 	var accel := (vel - _prev_vel) / maxf(delta, 0.0001)
 	_prev_vel = vel
 	var cam_basis: Basis = player.cam.global_transform.basis
@@ -771,7 +809,7 @@ func _locomotion(delta: float) -> void:
 	var lag_target := Vector3(clampf(-local_accel.x * 0.004, -0.03, 0.03), clampf(-vel.y * 0.0035, -0.02, 0.02), clampf(-local_accel.z * 0.003, -0.02, 0.02))
 	_lag = _lag.lerp(lag_target, 1.0 - exp(-6.0 * delta))
 	var breathe := sin(_time * 1.35) * 0.0045
-	_rig.position = Vector3(sway_x + _lag.x, sway_y + breathe + look_drop + _lag.y, _lag.z)
+	_rig.position = Vector3(sway_x + _lag.x, sway_y + breathe + _lag.y, _lag.z)
 	_rig.rotation_degrees = Vector3(bob_pitch, 0.0, bob_roll)
 	var hand_y := sin(_bob_phase + 0.5) * lerpf(0.004, 0.008, sprint) * amp
 	var staff_y := sin(_bob_phase + 2.0) * lerpf(0.004, 0.008, sprint) * amp
@@ -831,13 +869,15 @@ func _update_cast_origin() -> void:
 
 
 func _update_crystal() -> void:
-	var breathe := 0.9 + 0.12 * sin(_time * 2.1)
-	var intensity := breathe + _crystal_kick * 0.85
+	var breathe := 0.68 + 0.09 * sin(_time * 2.1)
+	var intensity := breathe + _crystal_kick * 0.64
 	_crystal_mat.set_shader_parameter("intensity", intensity)
-	_wood_mat.set_shader_parameter("head_glow", 0.35 + _crystal_kick * 0.9)
-	_halo_mat.set_shader_parameter("energy", 0.32 + _crystal_kick * 0.9)
-	_halo2_mat.set_shader_parameter("energy", 0.1 + _crystal_kick * 0.35)
-	_crystal_light.light_energy = 0.55 + intensity * 0.55
+	if _core_crystal:
+		_core_crystal.set_shader_parameter("intensity", 0.86 + _crystal_kick * 0.30)
+	_wood_mat.set_shader_parameter("head_glow", 0.135 + _crystal_kick * 0.30)
+	_halo_mat.set_shader_parameter("energy", 0.315 + _crystal_kick * 0.15)
+	_halo2_mat.set_shader_parameter("energy", 0.165 + _crystal_kick * 0.09)
+	_crystal_light.light_energy = 0.165 + _crystal_kick * 0.225
 	var s := 1.0 + _crystal_kick * 0.045
 	_crystal.scale = Vector3(s, s, s)
 
@@ -883,7 +923,7 @@ func _build_gestures() -> void:
 
 
 func _pose_idle() -> Pose:
-	return _p(Vector3.ZERO, Vector3(-28, -16, 10), 12.0, Vector2(16, 8), [
+	return _p(Vector3.ZERO, Vector3(-48, -22, 16), 16.0, Vector2(14, 8), [
 		Vector3(14, 18, 10),
 		Vector3(18, 24, 12),
 		Vector3(20, 26, 14),
@@ -1016,7 +1056,9 @@ func _setup_capture() -> void:
 		{"t": 8.2, "op": "press", "action": "cast"},
 		{"t": 8.56, "op": "shot", "name": "cast_meteor"},
 		{"t": 8.64, "op": "release", "action": "cast"},
-		{"t": 8.9, "op": "quit"},
+		{"t": 8.85, "op": "look", "pitch": 0.22, "yaw": -0.55},
+		{"t": 9.15, "op": "shot", "name": "crystal_over_moon"},
+		{"t": 9.35, "op": "quit"},
 	]
 	print("VIEWMODEL capture -> ", _cap_dir)
 
@@ -1043,6 +1085,11 @@ func _cap_run(ev: Dictionary) -> void:
 		"select":
 			if player.caster:
 				player.caster.select(int(ev["spell"]))
+		"look":
+			# Capture-only. Aims the sky disk toward the crystal for one proof shot.
+			player._pitch = float(ev["pitch"])
+			if ev.has("yaw"):
+				player.rotation.y = float(ev["yaw"])
 		"quit":
 			_release_capture_input()
 			get_tree().quit()

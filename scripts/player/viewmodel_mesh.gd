@@ -11,7 +11,8 @@ static func finger_segment(length: float, r0: float, r1: float, rounded_tip: boo
 	for i in steps:
 		var t := float(i) / float(steps - 1)
 		path.append(Vector3(0.0, 0.0, -length * t))
-		var belly := 1.0 + 0.10 * sin(t * PI)
+		var knuckle := exp(-t * t * 10.0)
+		var belly := 1.0 + 0.38 * knuckle + 0.05 * sin(t * PI)
 		radii.append(lerpf(r0, r1, t) * belly)
 		var crease := lerpf(0.55, 1.0, smoothstep(0.0, 0.4, t))
 		var rosy := 0.5 + 0.4 * sin(t * PI)
@@ -31,11 +32,12 @@ static func palm() -> ArrayMesh:
 	var rx := PackedFloat32Array()
 	var ry := PackedFloat32Array()
 	var specs := [
-		[0.018, 0.027, 0.023],
-		[-0.006, 0.032, 0.020],
-		[-0.030, 0.042, 0.017],
-		[-0.052, 0.047, 0.015],
-		[-0.074, 0.044, 0.014],
+		[0.05, 0.024, 0.021],
+		[0.02, 0.030, 0.024],
+		[-0.012, 0.038, 0.020],
+		[-0.038, 0.046, 0.017],
+		[-0.062, 0.050, 0.015],
+		[-0.082, 0.046, 0.014],
 	]
 	for spec in specs:
 		path.append(Vector3(0.0, 0.004, float(spec[0])))
@@ -44,17 +46,31 @@ static func palm() -> ArrayMesh:
 	return _ellipse_loft(path, rx, ry, 12)
 
 
+static func sleeve_span(length: float) -> ArrayMesh:
+	# Wide at the body end (z = 0) and fitted at the wrist (z = length).
+	var path := PackedVector3Array()
+	var radii := PackedFloat32Array()
+	var colors: Array = []
+	var steps := 14
+	for i in steps:
+		var t := float(i) / float(steps - 1)
+		path.append(Vector3(0.015 * t, -0.03 * (1.0 - t) * (1.0 - t), length * t))
+		radii.append(lerpf(0.105, 0.042, smoothstep(0.0, 0.8, t)))
+		colors.append(Color(1, 1, 1, 1))
+	return _tube(path, radii, 12, 0.35, 0.94, colors, false)
+
+
 static func sleeve() -> ArrayMesh:
 	var path := PackedVector3Array()
 	var radii := PackedFloat32Array()
 	var colors: Array = []
-	var steps := 8
+	var steps := 12
 	for i in steps:
 		var t := float(i) / float(steps - 1)
-		var z := lerpf(0.02, 0.40, t)
-		path.append(Vector3(0.012 * t, -0.045 * t * t, z))
-		# Modest bell. A wide cone reads as a megaphone, not a sleeve.
-		radii.append(lerpf(0.034, 0.062, smoothstep(0.0, 1.0, t)))
+		var z := lerpf(0.0, 0.72, t)
+		path.append(Vector3(0.02 * t, -0.08 * t * t, z))
+		# Narrow at the wrist, bell flare that continues off the bottom of the view.
+		radii.append(lerpf(0.04, 0.09, smoothstep(0.0, 0.72, t)))
 		colors.append(Color(1, 1, 1, 1))
 	return _tube(path, radii, 10, 0.4, 0.92, colors, false)
 
@@ -106,25 +122,34 @@ static func crown_ring() -> ArrayMesh:
 static func prongs() -> ArrayMesh:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var crystal := Vector3(0.58, 0.02, 0.0)
-	# Angle 0 is +Y (toward the camera). Leave that side open so the gem reads.
-	var angles: Array[float] = [1.15, 2.2, 3.3, 4.4, 5.4]
-	var touch: Array[bool] = [false, true, true, false, true]
-	for i in angles.size():
-		var ang := float(angles[i])
-		var dir := Vector3(0.0, cos(ang), sin(ang))
-		var gap := 0.058 if bool(touch[i]) else 0.078
-		var start := _shaft_center(0.9) + dir * _shaft_radius(0.9)
-		var c1 := start + Vector3(0.06, 0.0, 0.0) + dir * 0.07
-		var c2 := crystal + Vector3(-0.04, 0.0, 0.0) + dir * (gap + 0.03)
-		var tip := crystal + dir * gap + Vector3(-0.01, 0.0, 0.0)
-		_branch(st, start, c1, c2, tip, 0.016, 0.006, Color(0.72, 0.5, 0.36))
-		if i == 2 or i == 4:
-			var mid := _bezier(start, c1, c2, tip, 0.5)
-			var fork_dir := Vector3(0.0, cos(ang + 0.45), sin(ang + 0.45))
-			var f1 := mid + fork_dir * 0.03 + Vector3(0.02, 0.0, 0.0)
-			var ftip := mid + fork_dir * 0.055 + Vector3(0.05, 0.0, 0.0)
-			_branch(st, mid, f1, ftip, ftip + fork_dir * 0.01, 0.008, 0.0035, Color(0.62, 0.4, 0.3))
+	var gem := Vector3(0.64, 0.035, 0.0)
+	# Irregular claws. The +Y side (toward the camera) stays open.
+	var claws: Array = [
+		{"ang": 0.95, "reach": 0.13, "bend": 0.55, "gap": 0.092, "fork": true},
+		{"ang": 2.05, "reach": 0.16, "bend": -0.35, "gap": 0.086, "fork": false},
+		{"ang": 2.85, "reach": 0.11, "bend": 0.8, "gap": 0.10, "fork": true},
+		{"ang": 3.7, "reach": 0.15, "bend": 0.2, "gap": 0.088, "fork": false},
+		{"ang": 4.55, "reach": 0.14, "bend": -0.6, "gap": 0.095, "fork": true},
+		{"ang": 5.45, "reach": 0.10, "bend": 0.4, "gap": 0.11, "fork": false},
+	]
+	var wood := Color(0.78, 0.7, 0.62)
+	for claw in claws:
+		var ang := float(claw["ang"])
+		var dir := Vector3(sin(ang) * 0.35, cos(ang), sin(ang)).normalized()
+		var side := Vector3(cos(ang + float(claw["bend"])), sin(ang) * 0.4, cos(ang)).normalized()
+		var start := _shaft_center(0.86) + dir * (_shaft_radius(0.86) + 0.004)
+		var reach := float(claw["reach"])
+		var gap := float(claw["gap"])
+		var c1 := start + dir * reach + side * 0.03 + Vector3(0.04, 0.0, 0.0)
+		var c2 := gem + dir * (gap + 0.04) + side * 0.02 + Vector3(-0.03, 0.0, 0.0)
+		var tip := gem + dir * gap
+		_branch(st, start, c1, c2, tip, 0.018, 0.007, wood)
+		if bool(claw["fork"]):
+			var mid := _bezier(start, c1, c2, tip, 0.46)
+			var fork := (dir + side * 0.8).normalized()
+			var f1 := mid + fork * 0.045 + Vector3(0.02, 0.01, 0.0)
+			var f2 := mid + fork * 0.07 + dir * 0.02
+			_branch(st, mid, f1, f2, f2 + fork * 0.012, 0.009, 0.004, wood * Color(0.85, 0.8, 0.75))
 	st.index()
 	return st.commit()
 
@@ -190,7 +215,7 @@ static func _shaft_samples(steps: int) -> Dictionary:
 
 
 static func _shaft_center(t: float) -> Vector3:
-	var x := lerpf(-1.05, 0.50, t)
+	var x := lerpf(-1.05, 0.46, t)
 	var sp := t * TAU * 3.1
 	var amp := 0.022 * smoothstep(0.05, 0.28, t) * (1.0 - 0.55 * smoothstep(0.82, 0.97, t))
 	return Vector3(x, sin(sp) * amp + sin(t * TAU * 1.4) * 0.006, cos(sp * 0.9) * amp * 0.8)

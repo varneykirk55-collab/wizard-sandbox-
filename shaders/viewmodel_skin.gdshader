@@ -3,8 +3,8 @@
 shader_type spatial;
 render_mode cull_disabled, diffuse_burley, specular_schlick_ggx, shadows_disabled;
 
-uniform vec4 skin_color : source_color = vec4(0.74, 0.48, 0.38, 1.0);
-uniform vec4 shade_color : source_color = vec4(0.48, 0.26, 0.24, 1.0);
+uniform vec4 skin_color : source_color = vec4(0.80, 0.56, 0.45, 1.0);
+uniform vec4 shade_color : source_color = vec4(0.52, 0.30, 0.27, 1.0);
 
 void fragment() {
 	float crease = clamp(COLOR.r, 0.0, 1.0);
