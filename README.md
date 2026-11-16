@@ -20,11 +20,14 @@ Headless check (optional): `godot --headless --path . --import` then `godot --he
 | Move | WASD | Left stick |
 | Look | Mouse | Right stick |
 | Sprint | Shift (hold) | B (hold) or L3 (toggle) |
-| Jump | Space | A |
+| Jump | Space (tap) | A (tap) |
+| Fly | Hold Space (ascend), release to hover, Ctrl descends, Shift faster | Hold A (ascend), release to hover, B descends, L3 faster |
 | Select spell | 1-5, mouse wheel | LB / RB, D-pad left / right |
 | Cast | Left click | RT (or X) |
 | Reset world | R | Y |
 | Pause | Esc | Start (B also resumes) |
+
+Tap jump for a normal hop. Hold jump for a short moment after leaving the ground to levitate. In the air, release jump to hover at that height, hold jump to climb, and hold descend to drop. Touching walkable ground while descending lands and returns to walking. Flight does not spend mana or stamina, and it does not change spell damage, effects, audio or cooldowns. Casting works the same in the air. On a controller, B is sprint on the ground and descend in the air; left-stick click toggles sprint on the ground and flies faster while held in the air.
 
 Hold cast for **Thunder God** (continuous strikes) and **Inferno** (the tornado grows and follows your aim).
 Controller extras: vibration on casts and blasts, stick sensitivity, invert-Y and vibration toggle in the pause menu, which is fully navigable with D-pad / stick and A. HUD prompts switch automatically to the device you last touched.

@@ -157,6 +157,9 @@ func _generate_all() -> void:
 	streams["rumble"] = _make(_gen_rumble(4.0))
 	streams["wind"] = _make(_gen_wind(7.0, 0.01, 0.05, 0.6), true)
 	streams["chime"] = _make(_gen_chime(1.2))
+	# Levitation only. Spell one-shots above are unchanged.
+	streams["lift"] = _make(_gen_lift(0.55))
+	streams["hover"] = _make(_gen_hover(3.0), true)
 
 
 func _make(buf: PackedFloat32Array, loop: bool = false) -> AudioStreamWAV:
@@ -385,6 +388,40 @@ func _gen_rumble(dur: float) -> PackedFloat32Array:
 		var w := randf() * 2.0 - 1.0
 		lp += (w - lp) * 0.01
 		buf[i] = lp * m * sin(PI * minf(1.0, k * 6.0) * 0.5) * (1.0 - k)
+	return buf
+
+
+## Soft rising whoosh for takeoff. Kept well away from the cast chime and the explosions.
+func _gen_lift(dur: float) -> PackedFloat32Array:
+	var buf := _buffer(dur)
+	var n := buf.size()
+	var lp := 0.0
+	var phase := 0.0
+	for i in n:
+		var k := float(i) / float(n)
+		var env := sin(PI * k)
+		env *= env
+		var w := randf() * 2.0 - 1.0
+		lp += (w - lp) * lerpf(0.015, 0.08, k)
+		phase += TAU * lerpf(150.0, 460.0, k) / RATE
+		buf[i] = (sin(phase) * 0.28 + lp * 1.2) * env
+	return buf
+
+
+## Quiet magical hum while hovering. Loop length is an integer number of hum cycles.
+func _gen_hover(dur: float) -> PackedFloat32Array:
+	var buf := _buffer(dur)
+	var n := buf.size()
+	var lp := 0.0
+	var lp2 := 0.0
+	for i in n:
+		var t := float(i) / RATE
+		var w := randf() * 2.0 - 1.0
+		lp += (w - lp) * 0.035
+		lp2 += (lp - lp2) * 0.035
+		var hum := sin(TAU * 196.0 * t) * 0.22 + sin(TAU * 392.0 * t) * 0.06
+		var trem := 0.88 + 0.12 * sin(TAU * (1.0 / dur) * t)
+		buf[i] = (lp2 * 1.3 + hum) * trem * 0.45
 	return buf
 
 
