@@ -19,8 +19,8 @@ func add_box(dim: Vector3, pos: Vector3, bas: Basis = Basis.IDENTITY, mat: Strin
 	specs.append({"dim": dim, "kind": 0, "mat": mat, "hp": hp, "density": density, "xform": Transform3D(bas, pos)})
 
 
-func add_cyl(diameter: float, height: float, pos: Vector3, mat: String = "stone", hp: float = 100.0, cone: bool = false) -> void:
-	specs.append({"dim": Vector3(diameter, height, diameter), "kind": 2 if cone else 1, "mat": mat, "hp": hp, "density": 1.0, "xform": Transform3D(Basis.IDENTITY, pos)})
+func add_cyl(diameter: float, height: float, pos: Vector3, mat: String = "stone", hp: float = 100.0, cone: bool = false, density: float = 1.0) -> void:
+	specs.append({"dim": Vector3(diameter, height, diameter), "kind": 2 if cone else 1, "mat": mat, "hp": hp, "density": density, "xform": Transform3D(Basis.IDENTITY, pos)})
 
 
 ## Attaches a decoration to whichever piece is closest to `pos` (structure
