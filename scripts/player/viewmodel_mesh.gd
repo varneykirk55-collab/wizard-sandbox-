@@ -11,8 +11,8 @@ static func finger_segment(length: float, r0: float, r1: float, rounded_tip: boo
 	for i in steps:
 		var t := float(i) / float(steps - 1)
 		path.append(Vector3(0.0, 0.0, -length * t))
-		var knuckle := exp(-t * t * 10.0)
-		var belly := 1.0 + 0.38 * knuckle + 0.05 * sin(t * PI)
+		var knuckle := exp(-t * t * 14.0)
+		var belly := 1.0 + 0.16 * knuckle + 0.04 * sin(t * PI)
 		radii.append(lerpf(r0, r1, t) * belly)
 		var crease := lerpf(0.55, 1.0, smoothstep(0.0, 0.4, t))
 		var rosy := 0.5 + 0.4 * sin(t * PI)
@@ -28,22 +28,86 @@ static func finger_segment(length: float, r0: float, r1: float, rounded_tip: boo
 
 
 static func palm() -> ArrayMesh:
-	var path := PackedVector3Array()
-	var rx := PackedFloat32Array()
-	var ry := PackedFloat32Array()
-	var specs := [
-		[0.05, 0.024, 0.021],
-		[0.02, 0.030, 0.024],
-		[-0.012, 0.038, 0.020],
-		[-0.038, 0.046, 0.017],
-		[-0.062, 0.050, 0.015],
-		[-0.082, 0.046, 0.014],
+	# Wrist at +Z, knuckles at -Z, back of the hand +Y, palm -Y, thumb side +X.
+	# Cross-sections are wider than the wrist, cupped, with thenar and hypothenar pads.
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var slices: Array[Dictionary] = [
+		{"z": 0.042, "hw": 0.024, "ht": 0.020, "cup": 0.0, "thenar": 0.0, "hypo": 0.0},
+		{"z": 0.022, "hw": 0.030, "ht": 0.021, "cup": 0.001, "thenar": 0.008, "hypo": 0.003},
+		{"z": 0.002, "hw": 0.038, "ht": 0.019, "cup": 0.004, "thenar": 0.014, "hypo": 0.008},
+		{"z": -0.022, "hw": 0.044, "ht": 0.017, "cup": 0.007, "thenar": 0.010, "hypo": 0.010},
+		{"z": -0.048, "hw": 0.046, "ht": 0.015, "cup": 0.006, "thenar": 0.004, "hypo": 0.009},
+		{"z": -0.072, "hw": 0.043, "ht": 0.013, "cup": 0.003, "thenar": 0.0, "hypo": 0.005},
+		{"z": -0.090, "hw": 0.038, "ht": 0.011, "cup": 0.0, "thenar": 0.0, "hypo": 0.0},
 	]
-	for spec in specs:
-		path.append(Vector3(0.0, 0.004, float(spec[0])))
-		rx.append(float(spec[1]))
-		ry.append(float(spec[2]))
-	return _ellipse_loft(path, rx, ry, 12)
+	var sides := 14
+	var rings: Array = []
+	var norms: Array = []
+	var cols: Array = []
+	for slice in slices:
+		var z := float(slice["z"])
+		var hw := float(slice["hw"])
+		var ht := float(slice["ht"])
+		var cup := float(slice["cup"])
+		var thenar := float(slice["thenar"])
+		var hypo := float(slice["hypo"])
+		var ring := PackedVector3Array()
+		var nrm := PackedVector3Array()
+		var col := PackedColorArray()
+		for s in sides:
+			var a := float(s) / float(sides) * TAU
+			var cx := cos(a)
+			var sy := sin(a)
+			var px := cx * hw
+			var py := sy * ht
+			if sy < 0.0:
+				var palm_amt := -sy
+				if cx > 0.15:
+					px += thenar * palm_amt
+					py -= thenar * 0.65 * palm_amt
+				elif cx < -0.15:
+					px -= hypo * palm_amt
+					py -= hypo * 0.5 * palm_amt
+				var mid := 1.0 - absf(cx)
+				py += cup * mid * palm_amt
+			var p := Vector3(px, py, z)
+			var n := Vector3(px, py, 0.0)
+			if n.length() < 0.0001:
+				n = Vector3.UP
+			ring.append(p)
+			nrm.append(n.normalized())
+			var back := clampf(sy * 0.5 + 0.5, 0.0, 1.0)
+			col.append(Color(lerpf(0.72, 1.0, back), lerpf(0.42, 0.88, back), 0.4))
+		rings.append(ring)
+		norms.append(nrm)
+		cols.append(col)
+	_stitch(st, rings, norms, cols)
+	var r0: PackedVector3Array = rings[0]
+	var n0: PackedVector3Array = norms[0]
+	var c0: PackedColorArray = cols[0]
+	_cap_fan(st, r0, n0, c0, Vector3(0.0, 0.0, 0.042), Vector3(0.0, 0.0, 1.0))
+	var last := rings.size() - 1
+	var rl: PackedVector3Array = rings[last]
+	var nl: PackedVector3Array = norms[last]
+	var cl: PackedColorArray = cols[last]
+	_cap_fan(st, rl, nl, cl, Vector3(0.0, 0.0, -0.090), Vector3(0.0, 0.0, -1.0))
+	st.index()
+	return st.commit()
+
+
+static func wrist_neck() -> ArrayMesh:
+	# Smooth taper from the sleeve opening (+Z) into the wider palm.
+	var path := PackedVector3Array()
+	var radii := PackedFloat32Array()
+	var colors: Array = []
+	var steps := 6
+	for i in steps:
+		var t := float(i) / float(steps - 1)
+		path.append(Vector3(0.0, 0.001 * t, lerpf(0.055, -0.008, t)))
+		radii.append(lerpf(0.026, 0.034, smoothstep(0.0, 1.0, t)))
+		colors.append(Color(lerpf(0.7, 0.95, t), lerpf(0.55, 0.8, t), 0.35))
+	return _tube(path, radii, 12, 0.15, 0.92, colors, false)
 
 
 static func sleeve_span(length: float) -> ArrayMesh:
@@ -55,7 +119,7 @@ static func sleeve_span(length: float) -> ArrayMesh:
 	for i in steps:
 		var t := float(i) / float(steps - 1)
 		path.append(Vector3(0.015 * t, -0.03 * (1.0 - t) * (1.0 - t), length * t))
-		radii.append(lerpf(0.105, 0.042, smoothstep(0.0, 0.8, t)))
+		radii.append(lerpf(0.105, 0.033, smoothstep(0.0, 0.82, t)))
 		colors.append(Color(1, 1, 1, 1))
 	return _tube(path, radii, 12, 0.35, 0.94, colors, false)
 

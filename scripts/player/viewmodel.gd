@@ -54,6 +54,9 @@ var _cast_fingers: Array = []
 var _cast_thumb: Array = []
 var _staff_fingers: Array = []
 var _staff_thumb: Array = []
+var _frame_hold := false
+var _frame_pos := Vector3.ZERO
+var _present_cast := false
 var _cast_point: Node3D
 var _guard_cast: Array = []
 var _guard_staff: Array = []
@@ -240,6 +243,8 @@ func _sync_view() -> void:
 	# Orientation lock. The arms are a child of this camera, so pitch, yaw
 	# and flight stay matched without depending on ground height.
 	_vm_cam.global_transform = Transform3D(player.cam.global_transform.basis, Vector3.ZERO)
+	if _frame_hold:
+		_vm_cam.global_transform = _vm_cam.global_transform * Transform3D(Basis.IDENTITY, _frame_pos)
 	if absf(player.cam.fov - _vm_cam.fov) > 0.01:
 		_vm_cam.fov = player.cam.fov
 
@@ -308,31 +313,46 @@ func _make_hand(anchor: Node3D, side: float, grip: bool) -> Dictionary:
 	orient.transform = Transform3D(_hand_basis(side, anchor.position), Vector3.ZERO)
 	orient.scale = Vector3.ONE * 1.12
 	if grip:
-		orient.rotate_object_local(Vector3(1.0, 0.0, 0.0), deg_to_rad(-32.0))
+		orient.rotate_object_local(Vector3(1.0, 0.0, 0.0), deg_to_rad(-14.0))
 	pivot.add_child(orient)
 
+	_mesh(MeshLib.wrist_neck(), _skin(), orient)
 	var palm := Node3D.new()
 	palm.name = "Palm"
+	# A few degrees of wrist flexion so the hand is not a straight stick.
+	palm.rotation_degrees = Vector3(-12.0, 0.0, 0.0)
 	orient.add_child(palm)
 	_mesh(MeshLib.palm(), _skin(), palm)
 
+	# Index, middle, ring, pinky. Proximal > middle > distal.
+	# Middle is longest, ring slightly longer than index, pinky shortest.
 	var lengths := [
-		Vector3(0.034, 0.024, 0.022),
-		Vector3(0.037, 0.026, 0.023),
-		Vector3(0.034, 0.024, 0.021),
-		Vector3(0.026, 0.019, 0.017),
+		Vector3(0.032, 0.021, 0.015),
+		Vector3(0.036, 0.024, 0.017),
+		Vector3(0.034, 0.022, 0.016),
+		Vector3(0.025, 0.016, 0.012),
 	]
 	var radii := [
-		Vector4(0.011, 0.0094, 0.0082, 0.0070),
-		Vector4(0.0115, 0.0098, 0.0084, 0.0072),
-		Vector4(0.0106, 0.0092, 0.0080, 0.0068),
-		Vector4(0.0088, 0.0076, 0.0066, 0.0056),
+		Vector4(0.0092, 0.0080, 0.0068, 0.0056),
+		Vector4(0.0096, 0.0084, 0.0070, 0.0058),
+		Vector4(0.0090, 0.0078, 0.0066, 0.0054),
+		Vector4(0.0074, 0.0064, 0.0054, 0.0044),
 	]
-	var xs := [0.034, 0.012, -0.012, -0.036]
+	# Arched knuckle row: middle MCP is most distal and highest.
+	var knuckles := [
+		Vector3(0.026, 0.006, -0.078),
+		Vector3(0.008, 0.011, -0.090),
+		Vector3(-0.012, 0.008, -0.084),
+		Vector3(-0.030, 0.003, -0.070),
+	]
+	# Fan away from the middle finger. Positive is toward the thumb on a right hand.
+	var fan := [7.0, 2.0, -4.0, -9.0]
 	var fingers: Array = []
 	var tips: Array = []
 	for i in 4:
-		var joints := _add_finger(palm, Vector3(side * xs[i], 0.012, -0.066), lengths[i], radii[i])
+		var origin: Vector3 = knuckles[i]
+		origin.x *= side
+		var joints := _add_finger(palm, origin, lengths[i], radii[i], fan[i] * side)
 		fingers.append(joints)
 		tips.append(joints[2].get_node("Tip"))
 	var thumb := _add_thumb(palm, side)
@@ -364,16 +384,16 @@ func _connect_arm(anchor: Node3D, side: float) -> void:
 	var wrist: Vector3 = anchor.position
 	var delta := wrist - shoulder
 	var back := 0.48
+	var overlap := 0.03
 	var sleeve := Node3D.new()
 	sleeve.name = "Sleeve"
 	sleeve.transform = Transform3D(_aim_basis(delta), shoulder - delta.normalized() * back)
 	_rig.add_child(sleeve)
-	_mesh(MeshLib.sleeve_span(delta.length() + back), _cloth(), sleeve)
-	var reach := delta.length() + back
-	var trim := _mesh(MeshLib.band(0.012, 0.040, 0.0), _trim(), sleeve)
-	trim.position = Vector3(0.0, 0.0, reach - 0.03)
-	var braid := _mesh(MeshLib.band(0.006, 0.043, 0.0), _gold(), sleeve)
-	braid.position = Vector3(0.0, 0.0, reach - 0.012)
+	_mesh(MeshLib.sleeve_span(delta.length() + back + overlap), _cloth(), sleeve)
+	var reach := delta.length() + back + overlap
+	# Thin embroidery on the cloth, inset from the opening so it is not a floating cuff.
+	var braid := _mesh(MeshLib.band(0.005, 0.036, 0.0), _gold(), sleeve)
+	braid.position = Vector3(0.0, 0.0, reach - 0.045)
 
 
 func _aim_basis(direction: Vector3) -> Basis:
@@ -411,7 +431,7 @@ func _hand_basis(side: float, wrist: Vector3) -> Basis:
 	return Basis(x2, y2, z2)
 
 
-func _add_finger(parent: Node3D, origin: Vector3, lengths: Vector3, radii: Vector4) -> Array:
+func _add_finger(parent: Node3D, origin: Vector3, lengths: Vector3, radii: Vector4, fan: float) -> Array:
 	var joints: Array = []
 	var prev := parent
 	var lens := [lengths.x, lengths.y, lengths.z]
@@ -419,7 +439,10 @@ func _add_finger(parent: Node3D, origin: Vector3, lengths: Vector3, radii: Vecto
 	for i in 3:
 		var joint := Node3D.new()
 		joint.name = "F%d" % i
+		# MCP at the knuckle; PIP and DIP sit at the end of the previous phalanx.
 		joint.position = origin if i == 0 else Vector3(0.0, 0.0, -lens[i - 1])
+		if i == 0:
+			joint.set_meta("fan", fan)
 		prev.add_child(joint)
 		var seg := _styled(MeshInstance3D.new(), MeshLib.finger_segment(lens[i], rs[i], rs[i + 1], i == 2))
 		seg.material_override = _skin()
@@ -442,20 +465,21 @@ func _add_finger(parent: Node3D, origin: Vector3, lengths: Vector3, radii: Vecto
 func _add_thumb(parent: Node3D, side: float) -> Array:
 	var root := Node3D.new()
 	root.name = "Thumb"
-	root.position = Vector3(side * 0.040, -0.006, -0.02)
+	# CMC at the radial side of the palm base, not on the knuckle row.
+	root.position = Vector3(side * 0.034, -0.012, -0.010)
 	parent.add_child(root)
-	var a := _styled(MeshInstance3D.new(), MeshLib.finger_segment(0.034, 0.013, 0.011, false))
+	var a := _styled(MeshInstance3D.new(), MeshLib.finger_segment(0.030, 0.012, 0.010, false))
 	a.material_override = _skin()
 	root.add_child(a)
 	var mid := Node3D.new()
-	mid.position = Vector3(0.0, 0.0, -0.032)
+	mid.position = Vector3(0.0, 0.0, -0.030)
 	root.add_child(mid)
-	var b := _styled(MeshInstance3D.new(), MeshLib.finger_segment(0.026, 0.010, 0.008, true))
+	var b := _styled(MeshInstance3D.new(), MeshLib.finger_segment(0.022, 0.0095, 0.0075, true))
 	b.material_override = _skin()
 	mid.add_child(b)
 	var tip := Marker3D.new()
 	tip.name = "Tip"
-	tip.position = Vector3(0.0, 0.0, -0.026)
+	tip.position = Vector3(0.0, 0.0, -0.022)
 	mid.add_child(tip)
 	return [root, mid]
 
@@ -756,10 +780,10 @@ func _apply_grip() -> void:
 	if _staff_fingers.is_empty():
 		return
 	var grips := [
-		Vector3(88, 108, 78),
-		Vector3(92, 114, 82),
-		Vector3(96, 116, 84),
-		Vector3(100, 110, 80),
+		Vector3(68, 92, 58),
+		Vector3(74, 100, 64),
+		Vector3(72, 96, 62),
+		Vector3(64, 86, 54),
 	]
 	var spread_dir := [8.0, 3.0, -3.0, -8.0]
 	for i in 4:
@@ -774,7 +798,11 @@ func _set_curl(joints: Array, curls: Vector3, spread: float) -> void:
 	var root: Node3D = joints[0]
 	var mid: Node3D = joints[1]
 	var tip: Node3D = joints[2]
-	root.rotation_degrees = Vector3(CURL_SIGN * curls.x, spread, 0.0)
+	var fan := 0.0
+	if root.has_meta("fan"):
+		fan = float(root.get_meta("fan"))
+	# MCP flexes on X and abducts on Y. PIP and DIP flex on X only, toward the palm.
+	root.rotation_degrees = Vector3(CURL_SIGN * curls.x, spread + fan, 0.0)
 	mid.rotation_degrees = Vector3(CURL_SIGN * curls.y, 0.0, 0.0)
 	tip.rotation_degrees = Vector3(CURL_SIGN * curls.z, 0.0, 0.0)
 
@@ -782,7 +810,8 @@ func _set_curl(joints: Array, curls: Vector3, spread: float) -> void:
 func _set_thumb(joints: Array, curls: Vector2, side: float) -> void:
 	var root: Node3D = joints[0]
 	var mid: Node3D = joints[1]
-	root.rotation_degrees = Vector3(-42.0 + CURL_SIGN * curls.x, 68.0 * side, 18.0 * side)
+	# Yaw across the palm so the thumb opposes; X flexes the two phalanges toward it.
+	root.rotation_degrees = Vector3(CURL_SIGN * curls.x, 62.0 * side, 28.0 * side)
 	mid.rotation_degrees = Vector3(CURL_SIGN * curls.y, 0.0, 0.0)
 
 
@@ -809,14 +838,17 @@ func _locomotion(delta: float) -> void:
 	var lag_target := Vector3(clampf(-local_accel.x * 0.004, -0.03, 0.03), clampf(-vel.y * 0.0035, -0.02, 0.02), clampf(-local_accel.z * 0.003, -0.02, 0.02))
 	_lag = _lag.lerp(lag_target, 1.0 - exp(-6.0 * delta))
 	var breathe := sin(_time * 1.35) * 0.0045
-	_rig.position = Vector3(sway_x + _lag.x, sway_y + breathe + _lag.y, _lag.z)
+	if _frame_hold:
+		_rig.position = -_frame_pos
+	else:
+		_rig.position = Vector3(sway_x + _lag.x, sway_y + breathe + _lag.y, _lag.z)
 	_rig.rotation_degrees = Vector3(bob_pitch, 0.0, bob_roll)
 	var hand_y := sin(_bob_phase + 0.5) * lerpf(0.004, 0.008, sprint) * amp
 	var staff_y := sin(_bob_phase + 2.0) * lerpf(0.004, 0.008, sprint) * amp
 	# Keep translations small so the sleeves stay in the lower corners.
 	_cast_anchor.position = CAST_HOME + _shown.pos * 0.35 + Vector3(0.0, hand_y, 0.0)
 	_cast_anchor.rotation_degrees = Vector3.ZERO
-	_cast_pivot.rotation_degrees = _shown.rot
+	_cast_pivot.rotation_degrees = Vector3(55.0, 30.0, -20.0) if _present_cast else _shown.rot
 	_staff_anchor.position = STAFF_HOME + Vector3(0.0, staff_y, 0.0)
 	_staff_anchor.rotation_degrees = Vector3.ZERO
 	_staff_pivot.rotation_degrees = Vector3(_staff_react * 5.0, sin(_time * 1.1) * 0.8, -_staff_react * 4.0 + sin(_bob_phase) * amp * 1.4)
@@ -923,11 +955,11 @@ func _build_gestures() -> void:
 
 
 func _pose_idle() -> Pose:
-	return _p(Vector3.ZERO, Vector3(-48, -22, 16), 16.0, Vector2(14, 8), [
-		Vector3(14, 18, 10),
+	return _p(Vector3.ZERO, Vector3(-48, -22, 16), 4.0, Vector2(22, 12), [
+		Vector3(12, 16, 8),
+		Vector3(14, 20, 10),
+		Vector3(16, 22, 12),
 		Vector3(18, 24, 12),
-		Vector3(20, 26, 14),
-		Vector3(24, 30, 16),
 	])
 
 
@@ -1056,9 +1088,12 @@ func _setup_capture() -> void:
 		{"t": 8.2, "op": "press", "action": "cast"},
 		{"t": 8.56, "op": "shot", "name": "cast_meteor"},
 		{"t": 8.64, "op": "release", "action": "cast"},
-		{"t": 8.85, "op": "look", "pitch": 0.22, "yaw": -0.55},
-		{"t": 9.15, "op": "shot", "name": "crystal_over_moon"},
-		{"t": 9.35, "op": "quit"},
+		{"t": 8.85, "op": "look", "pitch": 0.0, "yaw": 0.0},
+		{"t": 9.05, "op": "frame", "x": -0.16, "y": -0.08, "z": -0.28},
+		{"t": 9.3, "op": "shot", "name": "closeup_staff_hand"},
+		{"t": 9.45, "op": "frame", "x": 0.12, "y": 0.02, "z": -0.22, "palm": true},
+		{"t": 9.7, "op": "shot", "name": "closeup_cast_hand"},
+		{"t": 9.85, "op": "quit"},
 	]
 	print("VIEWMODEL capture -> ", _cap_dir)
 
@@ -1086,10 +1121,13 @@ func _cap_run(ev: Dictionary) -> void:
 			if player.caster:
 				player.caster.select(int(ev["spell"]))
 		"look":
-			# Capture-only. Aims the sky disk toward the crystal for one proof shot.
 			player._pitch = float(ev["pitch"])
 			if ev.has("yaw"):
 				player.rotation.y = float(ev["yaw"])
+		"frame":
+			_frame_hold = true
+			_frame_pos = Vector3(float(ev["x"]), float(ev["y"]), float(ev["z"]))
+			_present_cast = bool(ev.get("palm", false))
 		"quit":
 			_release_capture_input()
 			get_tree().quit()
