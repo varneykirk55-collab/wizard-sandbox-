@@ -53,6 +53,9 @@ func build() -> void:
 	for tp in [Vector3(-24, 0, 20), Vector3(25, 0, 22), Vector3(-30, 0, -3), Vector3(31, 0, -6), Vector3(-20, 0, -36), Vector3(21, 0, -37), Vector3(-9, 0, 27), Vector3(11, 0, 28)]:
 		_tree(tp)
 
+	# District expansion inside the existing tree line and perimeter walls.
+	load("res://scripts/world/village_expansion.gd").new().run(self)
+
 
 func _new_structure(label: String, pos: Vector3, yaw: float):
 	var s = _structure_script.new()
@@ -291,8 +294,8 @@ func _well(pos: Vector3) -> void:
 	s.build()
 
 
-func _stall(pos: Vector3, yaw: float, cloth: String) -> void:
-	var s = _new_structure("Stall", pos, yaw)
+func _stall(pos: Vector3, yaw: float, cloth: String, label: String = "Stall") -> void:
+	var s = _new_structure(label, pos, yaw)
 	for sx in [-1.0, 1.0]:
 		for sz in [-1.0, 1.0]:
 			s.add_box(Vector3(0.15, 2.3, 0.15), Vector3(float(sx) * 1.6, 1.15, float(sz) * 1.0), Basis.IDENTITY, "timber", 60.0)

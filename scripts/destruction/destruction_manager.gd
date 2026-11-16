@@ -327,7 +327,23 @@ func _build_materials() -> void:
 	materials["thatch"] = _mat(Color(0.26, 0.5, 0.5), 1.0, 2.0, false, 0.06)
 	materials["cloth_red"] = _mat(Color(0.78, 0.15, 0.42), 0.9, 1.0, false, 0.02)
 	materials["cloth_blue"] = _mat(Color(0.2, 0.36, 0.88), 0.9, 1.0, false, 0.02)
+	materials["cloth_violet"] = _mat(Color(0.52, 0.28, 0.78), 0.88, 1.0, false, 0.02)
+	materials["cloth_teal"] = _mat(Color(0.12, 0.55, 0.58), 0.88, 1.0, false, 0.02)
 	materials["leaf"] = _mat(Color(0.1, 0.36, 0.34), 0.95, 1.0, false, 0.07)
+	materials["crystal_cyan"] = _crystal_mat(Color(0.3, 0.95, 1.0))
+	materials["crystal_violet"] = _crystal_mat(Color(0.7, 0.4, 1.0))
+	materials["crystal_teal"] = _crystal_mat(Color(0.25, 1.0, 0.75))
+
+
+func _crystal_mat(color: Color) -> StandardMaterial3D:
+	var m := StandardMaterial3D.new()
+	m.albedo_color = Color(color.r * 0.42, color.g * 0.42, color.b * 0.42)
+	m.roughness = 0.28
+	m.metallic = 0.08
+	m.emission_enabled = true
+	m.emission = color
+	m.emission_energy_multiplier = 2.3
+	return m
 
 
 func _mat(color: Color, rough: float, uv: float, cellular: bool, freq: float) -> StandardMaterial3D:

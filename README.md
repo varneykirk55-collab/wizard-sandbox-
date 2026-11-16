@@ -68,7 +68,7 @@ The player does not collide with loose debris (so rubble can never trap you); de
 
 ## Verification status
 
-Written without access to a Godot executable: no headless import, parse check or graphical run has been performed. Expect to fix a few first-run script or shader errors, and treat all visual and audio tuning as unverified.
+The original sandbox was first written without a Godot executable. The village expansion below was checked with Godot 4.3 stable: headless import, a headless load of `scenes/main.tscn`, and an opt-in budget script (`VILLAGE_AUDIT=1`). See that section for the counts. Frame rate on player hardware was not measured.
 
 ## Enchanted night overhaul (Phase A)
 
@@ -77,3 +77,18 @@ Written without access to a Godot executable: no headless import, parse check or
 - `Decor` autoload (`scripts/world/decor.gd`): window, lantern, crystal, finial, curl, rune, sign. Decorations are visual-only children of one destructible piece (`structure.decorate()` picks the nearest), so they follow it, vanish with it and return on rebuild. Lights on a loosened piece fade out.
 - Decorated so far: all six houses, the tower and the gate. Not yet: perimeter walls, colonnades, well, stalls, fences, crates, barrels, trees.
 - Piece specs, health, support graph, collision, spells, audio and input are unchanged. Baseline is tagged `baseline-v1` in Git.
+
+## Village expansion
+
+New districts are added inside the existing tree line and north wall. The original plaza, houses, great tower, gate and road are unchanged.
+
+- **Residential lanes** (east and west of the plaza): 4 timber-and-stone cottages with curved roofs, glowing windows, lanterns and rune marks, plus yard walls, lantern posts and crystal clusters.
+- **Marketplace** (both sides of the south road): 2 enchanted shops, 6 market stalls, 2 stone arches, paving and crystal clusters.
+- **Wizard tower court** (inside the north wall): 2 small spires, 2 workshops with furnaces, a processional arch, crenellated garden walls, lantern posts and crystal clusters.
+- Paths, shrubs and 4 trees fill the gaps between those districts.
+
+Every new building, stall, wall, arch, cluster, post, shrub and tree is a `Structure` registered with `DM`, so roofs, walls and supports break, collapse, and rebuild on the existing 180 s timer. Decorations are attached with `decorate()` and ride the piece they are parented to. Crystal shards use emissive materials and are not extra real-time lights. New omni lights are the lanterns only.
+
+Opt-in check (prints counts, support gaps, overlaps, and a one-shot explode on one cottage and one cluster):
+
+`VILLAGE_AUDIT=1 godot --headless --path . --quit-after 3`
