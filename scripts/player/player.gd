@@ -92,7 +92,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 		rotate_y(-event.relative.x * InputSetup.mouse_sens)
 		_pitch = clampf(_pitch - event.relative.y * InputSetup.mouse_sens, -1.5, 1.5)
-	for i in 5:
+	for i in caster.info.size():
 		if event.is_action_pressed("spell_%d" % (i + 1)):
 			caster.select(i)
 	if event.is_action_pressed("spell_next"):
@@ -194,9 +194,10 @@ func hold_trauma(v: float) -> void:
 func _on_spell_changed(i: int) -> void:
 	var c: Color = caster.info[i]["color"]
 	_marker.modulate = c
-	_marker.visible = i != 0
+	# Projectile spells (Cataclysm, Black Fire, Oblivion) aim with the reticle only.
+	_marker.visible = i >= 1 and i <= 4
 	var sizes := [5.0, 5.0, 8.0, 7.0, 16.0]
-	var sz: float = sizes[i]
+	var sz: float = sizes[mini(i, sizes.size() - 1)]
 	_marker.size = Vector3(sz, 8.0, sz)
 
 

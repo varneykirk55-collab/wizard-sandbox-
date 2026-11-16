@@ -48,6 +48,8 @@ func _enter_tree() -> void:
 	_key("spell_3", KEY_3)
 	_key("spell_4", KEY_4)
 	_key("spell_5", KEY_5)
+	_key("spell_6", KEY_6)
+	_key("spell_7", KEY_7)
 	_mouse("spell_next", MOUSE_BUTTON_WHEEL_DOWN)
 	_mouse("spell_prev", MOUSE_BUTTON_WHEEL_UP)
 	_pad("spell_next", JOY_BUTTON_RIGHT_SHOULDER)

@@ -134,7 +134,7 @@ func _build_game_ui() -> void:
 	col.add_child(bar)
 	for i in _info.size():
 		var panel := PanelContainer.new()
-		panel.custom_minimum_size = Vector2(158, 58)
+		panel.custom_minimum_size = Vector2(150, 58)
 		panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		var sb := StyleBoxFlat.new()
 		sb.set_corner_radius_all(8)
@@ -203,11 +203,11 @@ func _refresh_hint() -> void:
 	if _hint_pad and flying:
 		_hint.text = "FLIGHT   L-Stick move   R-Stick aim   L3 faster\nA ascend   release A hover   B descend   RT cast"
 	elif _hint_pad:
-		_hint.text = "L-Stick move   R-Stick look   L3 / B sprint   A jump (hold to fly)\nLB / RB spell   RT cast (hold: Thunder, Inferno)   Y reset   Start pause"
+		_hint.text = "L-Stick move   R-Stick look   L3 / B sprint   A jump (hold to fly)\nLB / RB spell   RT cast (hold: Thunder, Inferno, charge Black Fire)   Y reset   Start pause"
 	elif flying:
 		_hint.text = "FLIGHT   WASD move   Shift faster   mouse aim\nSpace ascend   release Space hover   Ctrl descend   click cast"
 	else:
-		_hint.text = "WASD move   Shift sprint   Space jump (hold to fly)   1-5 / wheel spell\nLeft click cast (hold: Thunder, Inferno)   R reset   Esc pause"
+		_hint.text = "WASD move   Shift sprint   Space jump (hold to fly)   1-7 / wheel spell\nLeft click cast (hold: Thunder, Inferno, charge Black Fire)   R reset   Esc pause"
 
 
 # ---------------------------------------------------------------------------

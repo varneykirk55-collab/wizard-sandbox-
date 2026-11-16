@@ -333,6 +333,16 @@ func _define_presets() -> void:
 	_presets["restore_sparkle"] = {"mat": "magic", "amount": 40, "life": 1.5, "explosive": 0.6, "radius": 4.0, "spread": 30.0, "vel": Vector2(1, 4), "scale": Vector2(0.3, 0.8), "colors": [Color(0.7, 1.0, 1.0, 1.0), Color(0.4, 0.8, 1.0, 0.0)]}
 
 
+## Extension hooks so new spells can add their own particle looks without
+## touching the presets above.
+func register_draw_mat(mat_name: String, tex: Texture2D, additive: bool, tint: Color, soft: bool) -> void:
+	_draw_mats[mat_name] = _draw_mat(tex, additive, tint, soft)
+
+
+func register_preset(preset: String, cfg: Dictionary) -> void:
+	_presets[preset] = cfg
+
+
 # ---------------------------------------------------------------------------
 # Composite effects
 # ---------------------------------------------------------------------------
