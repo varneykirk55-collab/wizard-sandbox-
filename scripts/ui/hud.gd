@@ -17,6 +17,8 @@ var _pause: Control
 var _resume: Button
 var _toast_t := 0.0
 var _stat_t := 0.0
+var _hint_pad := false
+var _hint_key := ""
 
 
 func _ready() -> void:
@@ -51,6 +53,7 @@ func _process(delta: float) -> void:
 	if _stat_t <= 0.0:
 		_stat_t = 0.25
 		_stats.text = "Debris %d   FPS %d" % [DM.debris.size(), int(Engine.get_frames_per_second())]
+	_refresh_hint()
 
 
 ## Brilliant full-screen flash (explosions).
@@ -184,10 +187,27 @@ func _on_spell_changed(index: int) -> void:
 
 
 func _on_device_changed(gamepad: bool) -> void:
-	if gamepad:
-		_hint.text = "L-Stick move   R-Stick look   L3 / B sprint   A jump\nLB / RB spell   RT cast (hold: Thunder, Inferno)   Y reset   Start pause"
+	_hint_pad = gamepad
+	_hint_key = ""
+	_refresh_hint()
+
+
+func _refresh_hint() -> void:
+	var flying := false
+	if player != null and player.has_method("is_flying"):
+		flying = player.is_flying()
+	var key := "%s-%s" % [_hint_pad, flying]
+	if key == _hint_key:
+		return
+	_hint_key = key
+	if _hint_pad and flying:
+		_hint.text = "FLIGHT   L-Stick move   R-Stick aim   L3 faster\nA ascend   release A hover   B descend   RT cast"
+	elif _hint_pad:
+		_hint.text = "L-Stick move   R-Stick look   L3 / B sprint   A jump (hold to fly)\nLB / RB spell   RT cast (hold: Thunder, Inferno)   Y reset   Start pause"
+	elif flying:
+		_hint.text = "FLIGHT   WASD move   Shift faster   mouse aim\nSpace ascend   release Space hover   Ctrl descend   click cast"
 	else:
-		_hint.text = "WASD move   Shift sprint   Space jump   1-5 / wheel spell\nLeft click cast (hold: Thunder, Inferno)   R reset   Esc pause"
+		_hint.text = "WASD move   Shift sprint   Space jump (hold to fly)   1-5 / wheel spell\nLeft click cast (hold: Thunder, Inferno)   R reset   Esc pause"
 
 
 # ---------------------------------------------------------------------------

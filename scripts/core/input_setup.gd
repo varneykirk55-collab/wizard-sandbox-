@@ -33,6 +33,12 @@ func _enter_tree() -> void:
 	_key("sprint", KEY_SHIFT)
 	_pad("sprint", JOY_BUTTON_B)
 	_pad("sprint_toggle", JOY_BUTTON_LEFT_STICK)
+	# Flight. B stays ground sprint; while levitating the player reads it as descend.
+	# Shift stays ground sprint; while levitating it is also the speed boost.
+	_key("descend", KEY_CTRL)
+	_pad("descend", JOY_BUTTON_B)
+	_key("fly_boost", KEY_SHIFT)
+	_pad("fly_boost", JOY_BUTTON_LEFT_STICK)
 	_mouse("cast", MOUSE_BUTTON_LEFT)
 	_axis("cast", JOY_AXIS_TRIGGER_RIGHT, 1.0, 0.35)
 	_pad("cast", JOY_BUTTON_X)
