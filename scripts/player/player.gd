@@ -1,22 +1,25 @@
 extends CharacterBody3D
 ## First-person wizard: WASD / left stick movement, mouse / right stick look,
 ## sprint, jump, aim ray and camera shake.
+## Levitation lives in flight.gd; this script keeps ground movement, aiming and spells.
 ##
 ## VIEWMODEL (visual only — see scripts/player/viewmodel.gd)
 ## Before: this script built primitive hands and a spell-colored palm orb, and
 ## bobbed them in `_process`.
 ## After: a Viewmodel child draws the hands and staff. Movement, look, camera
-## shake, aim, input and `_physics_process` are unchanged. `_orb` is now a
+## shake, aim, input, flight and `_physics_process` stay here. `_orb` is a
 ## Marker3D on the camera; the viewmodel moves it onto the casting hand so
 ## `caster.press(_orb.global_position, ...)` still launches from the hand.
-## Walk/sprint bob is derived in the viewmodel from `velocity` and
-## `is_on_floor()`, so flight can change movement without editing this file.
+## The viewmodel locks its overlay camera to `cam` and derives bob from
+## `velocity` and `is_on_floor()`, so flight does not move the world camera.
 
 const WALK := 6.5
 const SPRINT := 12.0
 const JUMP := 6.8
 const GRAVITY := 19.0
 const EYE := 1.65
+
+const _FlightScript := preload("res://scripts/player/flight.gd")
 
 var cam: Camera3D
 var caster
@@ -31,9 +34,14 @@ var _sprint_toggle := false
 ## Cast-origin anchor in camera space. The viewmodel writes this; do not bob it here.
 var _orb: Node3D
 var _marker: Decal
+var _flight
+var _hover_loop: AudioStreamPlayer3D
 
 
 func _ready() -> void:
+	_flight = _FlightScript.new()
+	_flight.started.connect(_on_flight_started)
+	_flight.ended.connect(_on_flight_ended)
 	collision_layer = 4
 	collision_mask = 3
 	var col := CollisionShape3D.new()
@@ -70,6 +78,14 @@ func _ready() -> void:
 	caster.cast.connect(_on_cast)
 	_on_spell_changed(0)
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	# Hands are built above and are not involved in flight.
+	_hover_loop = AudioStreamPlayer3D.new()
+	_hover_loop.bus = "SFX"
+	_hover_loop.stream = AudioManager.streams["hover"]
+	_hover_loop.volume_db = -26.0
+	_hover_loop.unit_size = 14.0
+	_hover_loop.max_db = 0.0
+	add_child(_hover_loop)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -83,7 +99,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		caster.select(caster.current + 1)
 	if event.is_action_pressed("spell_prev"):
 		caster.select(caster.current - 1)
-	if event.is_action_pressed("sprint_toggle"):
+	# L3 toggles ground sprint. In the air the same click is hold-to-fly-faster, not a latch.
+	if event.is_action_pressed("sprint_toggle") and not _flight.active:
 		_sprint_toggle = not _sprint_toggle
 
 
@@ -105,6 +122,7 @@ func _process(delta: float) -> void:
 	cam.position = Vector3(sin(_shake_t * 2.1) * 0.1 * s, EYE + sin(_shake_t * 2.9 + 0.5) * 0.1 * s, 0.0)
 
 	# Hands, staff, walk bob and cast gestures live on the Viewmodel child.
+	# It follows `cam` (including flight). This camera is not moved for the hands.
 	# Ground target ring for the area spells.
 	if _marker.visible:
 		_marker.global_position = aim_point if caster.current == 1 or caster.current == 2 else ground_point
@@ -116,16 +134,23 @@ func _physics_process(delta: float) -> void:
 	if inp.length() < 0.2:
 		_sprint_toggle = false
 	var dir := global_transform.basis * Vector3(inp.x, 0.0, inp.y)
-	var speed := SPRINT if (Input.is_action_pressed("sprint") or _sprint_toggle) else WALK
-	var accel := 60.0 if is_on_floor() else 18.0
-	velocity.x = move_toward(velocity.x, dir.x * speed, accel * delta)
-	velocity.z = move_toward(velocity.z, dir.z * speed, accel * delta)
-	if not is_on_floor():
-		velocity.y -= GRAVITY * delta
-	elif Input.is_action_just_pressed("jump"):
-		velocity.y = JUMP
+	# Flight owns velocity while airborne-and-held. Otherwise this is the original walk / jump.
+	if not _flight.physics_step(self, delta, dir, _flight_wish()):
+		var speed := SPRINT if (Input.is_action_pressed("sprint") or _sprint_toggle) else WALK
+		var accel := 60.0 if is_on_floor() else 18.0
+		accel = _flight.soften_ground_accel(accel)
+		velocity.x = move_toward(velocity.x, dir.x * speed, accel * delta)
+		velocity.z = move_toward(velocity.z, dir.z * speed, accel * delta)
+		if _flight.suppress_gravity:
+			_flight.suppress_gravity = false
+		elif not is_on_floor():
+			velocity.y -= GRAVITY * delta
+		if is_on_floor() and Input.is_action_just_pressed("jump"):
+			velocity.y = JUMP
 	move_and_slide()
+	_flight.after_slide(self)
 	if global_position.y < -30.0:
+		_flight.force_ground(self)
 		global_position = Vector3(0.0, 1.0, 31.0)
 		velocity = Vector3.ZERO
 
@@ -178,6 +203,31 @@ func _on_spell_changed(i: int) -> void:
 func _on_cast(_i: int) -> void:
 	AudioManager.play_ui("cast", -9.0, 0.9 + 0.1 * caster.current)
 	InputSetup.rumble(0.25, 0.1, 0.08)
+
+
+func is_flying() -> bool:
+	return _flight != null and _flight.active
+
+
+func _flight_wish() -> Dictionary:
+	return {
+		"jump_down": Input.is_action_pressed("jump"),
+		# B is still ground sprint. In the air the same button is descend.
+		# Ctrl is read directly because modifier keys are unreliable as an action alone.
+		"descend": Input.is_action_pressed("descend") or Input.is_key_pressed(KEY_CTRL),
+		"boost": Input.is_action_pressed("fly_boost"),
+	}
+
+
+func _on_flight_started() -> void:
+	AudioManager.play_at("lift", global_position, -16.0, 1.02, 12.0)
+	if _hover_loop != null and not _hover_loop.playing:
+		_hover_loop.play()
+
+
+func _on_flight_ended() -> void:
+	if _hover_loop != null:
+		_hover_loop.stop()
 
 
 func _build_viewmodel() -> void:
